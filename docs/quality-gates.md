@@ -179,7 +179,7 @@ git status --porcelain
 
 | Gate | Current evidence |
 | --- | --- |
-| Backend tests | `go test ./...` passes at **73.0%** statement coverage; `go vet` and `gofmt` clean |
+| Backend tests | `go test ./...` passes at **74.6%** statement coverage; `go vet` and `gofmt` clean |
 | Frontend tests | `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; **133 tests**, **98.1%** line coverage |
 | Browser DAP | Browser CDP E2E passed **3 consecutive local runs** with breakpoint, call stack, variables and no leftover Chromium/js-debug processes |
 | Full E2E | All 11 Playwright tests pass individually after targeted fixes; full 3x suite is delegated to GitHub Actions |
@@ -197,7 +197,7 @@ green GitHub Actions E2E run and a real Docker cold-start verification.
 | Dimension | Weight | Score | Evidence |
 | --- | ---: | ---: | --- |
 | Functional completeness | 25 | 23 | Browser DAP 3x local; full 11-test suite passes individually, CI run pending |
-| Automated testing | 20 | 19 | Go 73.0%, frontend 98.1%, 133 Vitest tests; CI E2E pending |
+| Automated testing | 20 | 19 | Go 74.6%, frontend 98.1%, 133 Vitest tests; CI E2E pending |
 | CI and release automation | 15 | 14 | Lint/test/coverage/build/E2E workflows committed; not yet executed on GitHub |
 | Documentation | 10 | 10 | Ports, Go-hosted SPA, CI and operations docs aligned |
 | Build and performance | 10 | 10 | No chunk warning; budgets met |

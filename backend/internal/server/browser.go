@@ -31,6 +31,7 @@ type browserSession struct {
 	cmd       *exec.Cmd
 	dir       string
 	tmp       string
+	exit      <-chan struct{}
 }
 
 func (s *Server) startBrowser(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +105,11 @@ func (s *Server) startBrowser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "chrome_failed", "could not start Chromium: "+err.Error())
 		return
 	}
+	exitCh := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(exitCh)
+	}()
 	go func() {
 		scanner := bufio.NewScanner(stderr)
 		scanner.Buffer(make([]byte, 64<<10), 1<<20)
@@ -111,16 +117,16 @@ func (s *Server) startBrowser(w http.ResponseWriter, r *http.Request) {
 			s.log.Info("chromium", "line", scanner.Text())
 		}
 	}()
-	port, err := waitChromePort(dir, 60*time.Second)
+	port, err := waitChromePort(dir, 60*time.Second, exitCh)
 	if err != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		_ = cmd.Wait()
+		<-exitCh
 		_ = os.RemoveAll(tmpDir)
 		_ = os.RemoveAll(dir)
 		writeError(w, http.StatusBadGateway, "chrome_failed", err.Error())
 		return
 	}
-	sess := &browserSession{id: id, owner: ws.OwnerID.Hex(), workspace: ws.ID.Hex(), port: port, cmd: cmd, dir: dir, tmp: tmpDir}
+	sess := &browserSession{id: id, owner: ws.OwnerID.Hex(), workspace: ws.ID.Hex(), port: port, cmd: cmd, dir: dir, tmp: tmpDir, exit: exitCh}
 	s.debugMu.Lock()
 	if s.browsers == nil {
 		s.browsers = make(map[string]*browserSession)
@@ -151,7 +157,7 @@ func (s *Server) stopBrowser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = syscall.Kill(-sess.cmd.Process.Pid, syscall.SIGKILL)
-	_ = sess.cmd.Wait()
+	<-sess.exit
 	_ = os.RemoveAll(sess.dir)
 	if sess.tmp != "" {
 		_ = os.RemoveAll(sess.tmp)
@@ -212,10 +218,17 @@ func reloadChrome(port int) error {
 	return errors.New("no page target to reload")
 }
 
-func waitChromePort(dir string, timeout time.Duration) (int, error) {
+func waitChromePort(dir string, timeout time.Duration, exited ...<-chan struct{}) (int, error) {
 	deadline := time.Now().Add(timeout)
 	path := filepath.Join(dir, "DevToolsActivePort")
 	for time.Now().Before(deadline) {
+		if len(exited) > 0 && exited[0] != nil {
+			select {
+			case <-exited[0]:
+				return 0, fmt.Errorf("Chromium exited before exposing a DevTools port")
+			default:
+			}
+		}
 		data, err := os.ReadFile(path)
 		if err == nil {
 			line := strings.SplitN(strings.TrimSpace(string(data)), "\n", 2)[0]
