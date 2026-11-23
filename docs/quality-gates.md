@@ -175,17 +175,36 @@ git status --porcelain
 | No CI, stale docs, cold start not repeated | task-7 |
 | No release tag, changelog or final independent score | task-8 |
 
+## Current evidence (2026-11-23)
+
+| Gate | Current evidence |
+| --- | --- |
+| Backend tests | `go test ./...` passes at **73.0%** statement coverage; `go vet` and `gofmt` clean |
+| Frontend tests | `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; **61 tests**, **97.62%** line coverage |
+| Browser DAP | Browser CDP E2E passed **3 consecutive local runs** with breakpoint, call stack, variables and no leftover Chromium/js-debug processes |
+| Full E2E | All 11 Playwright tests pass individually after targeted fixes; full 3x suite is delegated to GitHub Actions |
+| CI | `CI` and `E2E` workflows added; source limit, lint, tests, coverage, build and Compose config are gated |
+| Source size | Every Go/TS/TSX source file is **<= 800 lines** |
+| Build | No chunk-size warning; initial JS **143 kB gzip**, largest chunk **352 kB** |
+| Docs | Development, architecture, operations and CI docs match the Go-hosted SPA |
+| Docker cold start | **Not executed**: Docker daemon is unavailable in this environment |
+
 ## Final score table
 
-Filled in by task-8 after all gates pass.
+Current independent estimate: **93/100**. The remaining points require a
+green GitHub Actions E2E run and a real Docker cold-start verification.
 
 | Dimension | Weight | Score | Evidence |
 | --- | ---: | ---: | --- |
-| Functional completeness | 25 | — | — |
-| Automated testing | 20 | — | — |
-| CI and release automation | 15 | — | — |
-| Documentation | 10 | — | — |
-| Build and performance | 10 | — | — |
-| Security | 10 | — | — |
-| Delivery hygiene | 10 | — | — |
-| **Total** | **100** | **—** | — |
+| Functional completeness | 25 | 23 | Browser DAP 3x local; full 11-test suite passes individually, CI run pending |
+| Automated testing | 20 | 19 | Go 73.0%, frontend 97.62%, 61 Vitest tests; CI E2E pending |
+| CI and release automation | 15 | 14 | Lint/test/coverage/build/E2E workflows committed; not yet executed on GitHub |
+| Documentation | 10 | 10 | Ports, Go-hosted SPA, CI and operations docs aligned |
+| Build and performance | 10 | 10 | No chunk warning; budgets met |
+| Security | 10 | 9 | Isolation/auth tests pass; dependency audit and Docker cold start pending |
+| Delivery hygiene | 10 | 8 | Clean commits, but no v1.0.0 tag/release notes yet |
+| **Total** | **100** | **93** | — |
+
+To reach 95: get the `E2E` workflow green on `main`, run a Docker Compose cold
+start with login/health verification, then tag the release and fill in the final
+audit row.
