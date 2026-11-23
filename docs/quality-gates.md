@@ -182,8 +182,8 @@ git status --porcelain
 | Backend tests | `go test ./...` passes at **74.6%** statement coverage; `go vet` and `gofmt` clean |
 | Frontend tests | `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; **133 tests**, **98.1%** line coverage |
 | Browser DAP | Browser CDP E2E passed **3 consecutive local runs** with breakpoint, call stack, variables and no leftover Chromium/js-debug processes |
-| Full E2E | All 11 Playwright tests pass individually after targeted fixes; full 3x suite is delegated to GitHub Actions |
-| CI | `CI` and `E2E` workflows added; source limit, lint, tests, coverage, build and Compose config are gated |
+| Full E2E | **12/12 Playwright tests pass on GitHub Actions** (`E2E` run 45224748512), including the new window-management suite; local unit gates green |
+| CI | `CI` and `E2E` workflows executed green on `main` (run 45224748505 / 45224748512); source limit, lint, tests, coverage, build and Compose config are gated |
 | Source size | Every Go/TS/TSX source file is **<= 800 lines** |
 | Build | No chunk-size warning; initial JS **143 kB gzip**, largest chunk **352 kB** |
 | Docs | Development, architecture, operations and CI docs match the Go-hosted SPA |

@@ -38,7 +38,6 @@ jobs:
       GOLAND_DLV: ${{ github.workspace }}/bin/tools/dlv
       GOLAND_TSSERVER: ${{ github.workspace }}/frontend/node_modules/.bin/typescript-language-server
       GOLAND_JS_DEBUG: ${{ github.workspace }}/deploy/js-debug/src/dapDebugServer.js
-      GOLAND_DEBUG_DAP_TRACE: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -94,7 +93,6 @@ jobs:
             "GOLAND_TSSERVER=$GOLAND_TSSERVER" \
             "GOLAND_JS_DEBUG=$GOLAND_JS_DEBUG" \
             "GOLAND_E2E_SERVER_LOG=$GOLAND_E2E_SERVER_LOG" \
-            "GOLAND_DEBUG_DAP_TRACE=$GOLAND_DEBUG_DAP_TRACE" \
             pnpm test:e2e
       - name: Show backend log tail
         if: always()
