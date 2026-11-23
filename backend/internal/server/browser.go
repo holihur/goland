@@ -30,6 +30,7 @@ type browserSession struct {
 	port      int
 	cmd       *exec.Cmd
 	dir       string
+	tmp       string
 }
 
 func (s *Server) startBrowser(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +78,14 @@ func (s *Server) startBrowser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = os.Chown(dir, int(identity.UID), int(identity.GID))
+	// Chromium creates the process-singleton socket under TMPDIR; keep that
+	// short too, otherwise long workspace home paths exceed the socket limit.
+	tmpDir := filepath.Join(base, "tmp-"+id)
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		writeError(w, http.StatusInternalServerError, "chrome_failed", err.Error())
+		return
+	}
+	_ = os.Chown(tmpDir, int(identity.UID), int(identity.GID))
 	args := []string{
 		"--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
 		"--disable-extensions", "--no-first-run", "--remote-debugging-port=0",
@@ -84,7 +93,7 @@ func (s *Server) startBrowser(w http.ResponseWriter, r *http.Request) {
 	}
 	cmd := exec.Command(s.cfg.Chrome, args...)
 	cmd.Dir = root
-	cmd.Env = identity.Env(root)
+	cmd.Env = append(identity.Env(root), "TMPDIR="+tmpDir, "TMP="+tmpDir, "TEMP="+tmpDir)
 	identity.Apply(cmd)
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -106,10 +115,12 @@ func (s *Server) startBrowser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		_ = cmd.Wait()
+		_ = os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(dir)
 		writeError(w, http.StatusBadGateway, "chrome_failed", err.Error())
 		return
 	}
-	sess := &browserSession{id: id, owner: ws.OwnerID.Hex(), workspace: ws.ID.Hex(), port: port, cmd: cmd, dir: dir}
+	sess := &browserSession{id: id, owner: ws.OwnerID.Hex(), workspace: ws.ID.Hex(), port: port, cmd: cmd, dir: dir, tmp: tmpDir}
 	s.debugMu.Lock()
 	if s.browsers == nil {
 		s.browsers = make(map[string]*browserSession)
@@ -142,6 +153,9 @@ func (s *Server) stopBrowser(w http.ResponseWriter, r *http.Request) {
 	_ = syscall.Kill(-sess.cmd.Process.Pid, syscall.SIGKILL)
 	_ = sess.cmd.Wait()
 	_ = os.RemoveAll(sess.dir)
+	if sess.tmp != "" {
+		_ = os.RemoveAll(sess.tmp)
+	}
 	s.audit(r, "browser.stop", ws.ID.Hex(), id)
 	w.WriteHeader(http.StatusNoContent)
 }
