@@ -67,7 +67,6 @@ export function WorkspaceHome({
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 bg-grid opacity-[0.14]" />
       <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-primary/10 blur-3xl" />
 
       <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b px-5">
@@ -89,7 +88,7 @@ export function WorkspaceHome({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 rounded-md p-1 pr-2 transition-colors hover:bg-accent">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-[11px] font-semibold text-white">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-sky-500 text-[11px] font-semibold text-white">
                   {user.name.slice(0, 1).toUpperCase()}
                 </span>
                 <span className="hidden text-xs text-muted-foreground sm:block">{user.name}</span>

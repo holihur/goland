@@ -495,7 +495,7 @@ export function IDE({
             <div className="mx-1 h-4 w-px bg-border" />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-[10px] font-semibold text-white">
+                <button className="grid h-6 w-6 place-items-center rounded-full bg-sky-500 text-[10px] font-semibold text-white">
                   {user.name.slice(0, 1).toUpperCase()}
                 </button>
               </DropdownMenuTrigger>

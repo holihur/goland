@@ -29,7 +29,6 @@ export function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   return (
     <div className="grid h-full grid-cols-1 overflow-hidden bg-background lg:grid-cols-[1.05fr_0.95fr]">
       <div className="relative hidden flex-col justify-between overflow-hidden border-r bg-[#090b0e] p-12 lg:flex">
-        <div className="absolute inset-0 bg-grid opacity-[0.18]" />
         <div className="absolute -left-20 top-1/3 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative flex items-center gap-2.5">
           <div className="grid h-8 w-8 place-items-center rounded-md border border-primary/30 bg-primary/10">

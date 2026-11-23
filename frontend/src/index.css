@@ -81,12 +81,6 @@
   .text-balance {
     text-wrap: balance;
   }
-  .bg-grid {
-    background-image:
-      linear-gradient(to right, hsl(var(--border) / 0.35) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--border) / 0.35) 1px, transparent 1px);
-    background-size: 28px 28px;
-  }
 }
 
 .cm-theme,
