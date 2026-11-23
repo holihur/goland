@@ -34,8 +34,8 @@ jobs:
       GOLAND_TEST_MONGO_URI: mongodb://127.0.0.1:27019
       GOLAND_ISOLATION: user
       GOLAND_DEV_PERMISSIONS: "true"
-      GOLAND_GOPLS: ${{ runner.temp }}/goland-tools/gopls
-      GOLAND_DLV: ${{ runner.temp }}/goland-tools/dlv
+      GOLAND_GOPLS: ${{ github.workspace }}/bin/tools/gopls
+      GOLAND_DLV: ${{ github.workspace }}/bin/tools/dlv
       GOLAND_TSSERVER: ${{ github.workspace }}/frontend/node_modules/.bin/typescript-language-server
       GOLAND_JS_DEBUG: ${{ github.workspace }}/deploy/js-debug/src/dapDebugServer.js
     steps:
@@ -62,10 +62,11 @@ jobs:
           cd backend && go build -trimpath -o ../bin/goland-e2e ./cmd/server
       - name: Install language/debug tools
         run: |
-          GOBIN="$RUNNER_TEMP/goland-tools" go install golang.org/x/tools/gopls@latest
-          GOBIN="$RUNNER_TEMP/goland-tools" go install github.com/go-delve/delve/cmd/dlv@latest
-          chmod -R o+rx "$RUNNER_TEMP/goland-tools"
-          sudo chmod o+x /home/runner /home/runner/work "$RUNNER_TEMP"
+          mkdir -p bin/tools
+          GOBIN="$GITHUB_WORKSPACE/bin/tools" go install golang.org/x/tools/gopls@latest
+          GOBIN="$GITHUB_WORKSPACE/bin/tools" go install github.com/go-delve/delve/cmd/dlv@latest
+          chmod -R o+rx bin/tools
+          sudo chmod o+x /home/runner /home/runner/work "$GITHUB_WORKSPACE"
       - name: Install Playwright Chromium
         run: |
           sudo mkdir -p /opt/playwright
