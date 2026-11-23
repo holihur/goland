@@ -32,7 +32,7 @@ function FileIcon({ name, className }: { name: string; className?: string }) {
   if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return <FileCode2 className={cn("text-blue-400", className)} />;
   if (lower.endsWith(".js") || lower.endsWith(".jsx")) return <FileCode2 className={cn("text-yellow-300", className)} />;
   if (lower.endsWith(".json")) return <FileJson className={cn("text-amber-300", className)} />;
-  if (lower.endsWith(".md")) return <FileText className={cn("text-slate-300", className)} />;
+  if (lower.endsWith(".md")) return <FileText className={cn("text-muted-foreground", className)} />;
   return <File className={cn("text-muted-foreground", className)} />;
 }
 
@@ -223,7 +223,7 @@ function TreeNode({
   return (
     <div>
       <div
-        className="group flex h-6 cursor-pointer items-center gap-1 pr-1 text-[12px] text-slate-300 hover:bg-accent/60"
+        className="group flex h-6 cursor-pointer items-center gap-1 pr-1 text-[12px] text-muted-foreground hover:bg-accent/60"
         style={{ paddingLeft: depth * 12 + 6 }}
         onClick={() => (isDir ? setExpanded((value) => !value) : onOpenFile(entry.path))}
       >

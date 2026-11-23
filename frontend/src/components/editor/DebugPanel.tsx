@@ -574,7 +574,7 @@ export function DebugPanel({
             <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Variables</div>
             {groups.map((group) => (
               <div key={group.scope.name} className="mb-2">
-                <div className="text-[10px] font-medium text-slate-300">{group.scope.name}</div>
+                <div className="text-[10px] font-medium text-foreground">{group.scope.name}</div>
                 <div className="mt-0.5 space-y-0.5">
                   {group.variables.map((variable) => (
                     <VariableRow key={variable.name} variable={variable} client={clientRef.current} depth={0} />
@@ -589,7 +589,7 @@ export function DebugPanel({
         {output && (
           <div className="p-2.5">
             <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Debug console</div>
-            <pre ref={outputRef} className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-2 font-code text-[9px] leading-4 text-slate-300">
+            <pre ref={outputRef} className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 font-code text-[9px] leading-4 text-muted-foreground">
               {output}
             </pre>
           </div>

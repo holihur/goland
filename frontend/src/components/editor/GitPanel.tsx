@@ -273,7 +273,7 @@ export function GitPanel({
                 </button>
               </div>
             </div>
-            <pre className="max-h-64 overflow-auto border-t bg-black/25 p-2 font-code text-[10px] leading-4 text-slate-300">
+            <pre className="max-h-64 overflow-auto border-t bg-background/60 p-2 font-code text-[10px] leading-4 text-muted-foreground">
               {diffLoading ? "Loading diff…" : diff}
             </pre>
           </div>
@@ -282,7 +282,7 @@ export function GitPanel({
         {showLog && (
           <div className="border-t">
             <div className="px-2 py-1 text-[9px] uppercase tracking-wider text-muted-foreground">Recent commits</div>
-            <pre className="max-h-40 overflow-auto bg-black/25 p-2 font-code text-[10px] leading-4 text-slate-300">
+            <pre className="max-h-40 overflow-auto bg-background/60 p-2 font-code text-[10px] leading-4 text-muted-foreground">
               {log || "No commits yet."}
             </pre>
           </div>

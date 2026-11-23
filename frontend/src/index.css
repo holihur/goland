@@ -4,6 +4,31 @@
 
 @layer base {
   :root {
+    --background: 210 24% 98%;
+    --foreground: 220 20% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 12%;
+    --primary: 199 89% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 18% 93%;
+    --secondary-foreground: 220 18% 18%;
+    --muted: 210 16% 94%;
+    --muted-foreground: 215 12% 42%;
+    --accent: 210 18% 91%;
+    --accent-foreground: 220 20% 14%;
+    --destructive: 0 68% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 16% 86%;
+    --input: 214 16% 82%;
+    --ring: 199 89% 42%;
+    --radius: 0.5rem;
+    --editor: 0 0% 100%;
+    --panel: 210 24% 98%;
+  }
+
+  .dark {
     --background: 220 16% 7%;
     --foreground: 213 20% 92%;
     --card: 220 14% 9%;
@@ -23,7 +48,6 @@
     --border: 218 13% 19%;
     --input: 218 13% 20%;
     --ring: 199 89% 55%;
-    --radius: 0.5rem;
     --editor: 220 16% 7%;
     --panel: 220 14% 9%;
   }
@@ -44,7 +68,7 @@
   }
 
   ::selection {
-    background: hsl(199 89% 55% / 0.25);
+    background: hsl(var(--primary) / 0.25);
   }
 
   ::-webkit-scrollbar {

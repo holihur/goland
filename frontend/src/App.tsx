@@ -5,10 +5,12 @@ import type { User, Workspace } from "@/lib/types";
 import { LoginPage } from "@/components/LoginPage";
 import { WorkspaceHome } from "@/components/WorkspaceHome";
 import { IDE } from "@/components/ide/IDE";
+import { useI18n } from "@/lib/i18n";
 
 type Phase = "loading" | "login" | "ready";
 
 export default function App() {
+  const { t } = useI18n();
   const [phase, setPhase] = useState<Phase>("loading");
   const [user, setUser] = useState<User | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -64,7 +66,7 @@ export default function App() {
       <div className="flex h-full items-center justify-center bg-background">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          Opening workspace…
+          {t("app.opening")}
         </div>
       </div>
     );

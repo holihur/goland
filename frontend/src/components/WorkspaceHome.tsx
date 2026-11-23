@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   ArrowRight,
-  Braces,
   Clock3,
   GitBranch,
   HardDrive,
@@ -31,6 +30,9 @@ import {
 import { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
 import { AdminUsersDialog } from "./AdminUsersDialog";
 import { relativeTime } from "@/lib/utils";
+import { Logo } from "@/components/Logo";
+import { LanguageToggle, useI18n } from "@/lib/i18n";
+import { ThemeToggle } from "@/lib/theme";
 
 export function WorkspaceHome({
   user,
@@ -45,6 +47,7 @@ export function WorkspaceHome({
   onRefresh: () => Promise<Workspace[]>;
   onLogout: () => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [usersOpen, setUsersOpen] = useState(false);
@@ -53,15 +56,16 @@ export function WorkspaceHome({
   );
 
   const remove = async (workspace: Workspace) => {
-    if (!window.confirm(`Delete "${workspace.name}"?${workspace.managed ? " Its cloned files will be removed." : ""}`)) {
+    const message = t("home.deleteConfirm", { name: workspace.name }) + (workspace.managed ? t("home.deleteConfirmManaged") : "");
+    if (!window.confirm(message)) {
       return;
     }
     try {
       await api.deleteWorkspace(workspace.id);
       await onRefresh();
-      toast.success("Workspace deleted");
+      toast.success(t("home.workspaceDeleted"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete workspace");
+      toast.error(err instanceof ApiError ? err.message : t("home.deleteFailed"));
     }
   };
 
@@ -71,9 +75,7 @@ export function WorkspaceHome({
 
       <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b px-5">
         <div className="flex items-center gap-2.5">
-          <div className="grid h-7 w-7 place-items-center rounded-md border border-primary/30 bg-primary/10">
-            <Braces className="h-3.5 w-3.5 text-primary" />
-          </div>
+          <Logo className="h-7 w-7 rounded-md" />
           <span className="text-sm font-semibold tracking-tight">Goland</span>
           <Badge variant="secondary" className="ml-1 text-[9px] uppercase tracking-wider">
             web
@@ -81,10 +83,12 @@ export function WorkspaceHome({
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-1.5 rounded-full border bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground sm:flex">
+          <div className="hidden items-center gap-1.5 rounded-full border bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground md:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            API connected
+            {t("home.apiConnected")}
           </div>
+          <LanguageToggle compact />
+          <ThemeToggle compact />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 rounded-md p-1 pr-2 transition-colors hover:bg-accent">
@@ -102,15 +106,15 @@ export function WorkspaceHome({
               <DropdownMenuSeparator />
               {user.role === "admin" && (
                 <DropdownMenuItem onSelect={() => setUsersOpen(true)}>
-                  <Users className="h-4 w-4" /> Manage users
+                  <Users className="h-4 w-4" /> {t("home.manageUsers")}
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onSelect={() => toast.info("Settings are coming with the workspace settings panel.")}>
-                <Settings2 className="h-4 w-4" /> Preferences
+              <DropdownMenuItem onSelect={() => toast.info(t("home.settingsSoon"))}>
+                <Settings2 className="h-4 w-4" /> {t("home.preferences")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={onLogout}>
-                <LogOut className="h-4 w-4" /> Sign out
+                <LogOut className="h-4 w-4" /> {t("home.signOut")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -122,16 +126,15 @@ export function WorkspaceHome({
           <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
             <div>
               <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-primary">
-                <Sparkles className="h-3.5 w-3.5" /> Development spaces
+                <Sparkles className="h-3.5 w-3.5" /> {t("home.kicker")}
               </div>
-              <h1 className="text-3xl font-semibold tracking-[-0.03em]">Good to see you, {user.name.split(" ")[0]}.</h1>
+              <h1 className="text-3xl font-semibold tracking-[-0.03em]">{t("home.greeting", { name: user.name.split(" ")[0] })}</h1>
               <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                Pick up a project, or import a new one. Your files, terminals and credentials stay scoped to your
-                account.
+                {t("home.body")}
               </p>
             </div>
             <Button className="h-9 shrink-0 gap-2" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" /> New workspace
+              <Plus className="h-4 w-4" /> {t("home.newWorkspace")}
             </Button>
           </div>
 
@@ -141,12 +144,12 @@ export function WorkspaceHome({
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filter workspaces…"
+                placeholder={t("home.filter")}
                 className="pl-8"
               />
             </div>
             <div className="text-[11px] text-muted-foreground">
-              {filtered.length} {filtered.length === 1 ? "workspace" : "workspaces"}
+              {t(filtered.length === 1 ? "home.workspaceCount" : "home.workspaceCountPlural", { count: filtered.length })}
             </div>
           </div>
 
@@ -157,16 +160,14 @@ export function WorkspaceHome({
                   <HardDrive className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <h2 className="mt-4 text-base font-medium">
-                  {workspaces.length === 0 ? "No workspaces yet" : "Nothing matches that filter"}
+                  {workspaces.length === 0 ? t("home.noWorkspaces") : t("home.noMatches")}
                 </h2>
                 <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                  {workspaces.length === 0
-                    ? "Import a server directory or clone a Git repository to open the editor."
-                    : "Try a shorter search, or create another workspace."}
+                  {workspaces.length === 0 ? t("home.noWorkspacesBody") : t("home.noMatchesBody")}
                 </p>
                 {workspaces.length === 0 && (
                   <Button size="sm" className="mt-5" onClick={() => setCreateOpen(true)}>
-                    <Plus className="h-3.5 w-3.5" /> Add your first workspace
+                    <Plus className="h-3.5 w-3.5" /> {t("home.addFirst")}
                   </Button>
                 )}
               </div>
@@ -200,10 +201,10 @@ export function WorkspaceHome({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
                         <DropdownMenuItem onSelect={() => onOpen(workspace)}>
-                          <ArrowRight className="h-4 w-4" /> Open
+                          <ArrowRight className="h-4 w-4" /> {t("home.open")}
                         </DropdownMenuItem>
                         <DropdownMenuItem className="text-red-400" onSelect={() => void remove(workspace)}>
-                          <Trash2 className="h-4 w-4" /> Delete
+                          <Trash2 className="h-4 w-4" /> {t("home.delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -224,7 +225,7 @@ export function WorkspaceHome({
                         </>
                       ) : (
                         <>
-                          <HardDrive className="h-3 w-3" /> local
+                          <HardDrive className="h-3 w-3" /> {t("home.local")}
                         </>
                       )}
                     </span>
@@ -239,12 +240,12 @@ export function WorkspaceHome({
 
           <div className="mt-12 flex flex-wrap items-center gap-4 rounded-lg border bg-card/30 px-4 py-3 text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <Shield className="h-3.5 w-3.5 text-emerald-400" /> Per-user workspace isolation
+              <Shield className="h-3.5 w-3.5 text-emerald-400" /> {t("home.isolation")}
             </span>
             <span className="hidden h-3 w-px bg-border sm:block" />
-            <span>Go &amp; TypeScript language services</span>
+            <span>{t("home.languageServices")}</span>
             <span className="hidden h-3 w-px bg-border sm:block" />
-            <span>Encrypted Git credentials</span>
+            <span>{t("home.encryptedGit")}</span>
           </div>
         </div>
       </main>
@@ -255,7 +256,7 @@ export function WorkspaceHome({
         onCreated={(workspace) => {
           void onRefresh();
           onOpen(workspace);
-          toast.success("Workspace ready");
+          toast.success(t("home.workspaceReady"));
         }}
       />
       <AdminUsersDialog open={usersOpen} onOpenChange={setUsersOpen} />

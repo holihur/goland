@@ -12,16 +12,17 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { toast } from "sonner";
 import type { Diagnostic } from "@/lib/types";
 import type { LSPClient, SourceLocation } from "@/lib/lsp";
+import { useTheme } from "@/lib/theme";
 
 const editorTheme = EditorView.theme({
   "&": { backgroundColor: "transparent", height: "100%" },
   ".cm-content": { padding: "10px 0 80px" },
   ".cm-line": { padding: "0 16px" },
   ".cm-gutters": { paddingLeft: "6px" },
-  ".cm-tooltip": { border: "1px solid hsl(218 13% 22%)", background: "hsl(220 14% 10%)" },
+  ".cm-tooltip": { border: "1px solid hsl(var(--border))", background: "hsl(var(--popover))", color: "hsl(var(--popover-foreground))" },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
-    background: "hsl(218 14% 18%)",
-    color: "hsl(210 20% 96%)",
+    background: "hsl(var(--accent))",
+    color: "hsl(var(--accent-foreground))",
   },
   ".cm-lsp-hover": {
     maxWidth: "620px",
@@ -154,6 +155,7 @@ export function CodeEditor({
   breakpoints?: number[];
   onCursorChange?: (line: number) => void;
 }) {
+  const { theme } = useTheme();
   const viewRef = useRef<EditorView | null>(null);
   const saveRef = useRef(onSave);
   const openLocationRef = useRef(onOpenLocation);
@@ -322,7 +324,6 @@ export function CodeEditor({
     if (!lsp) return;
     void lsp.openDocument(path, value).catch(() => undefined);
     // The document is opened once per editor instance.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lsp, path]);
 
   useEffect(() => {
@@ -375,7 +376,7 @@ export function CodeEditor({
     <CodeMirror
       value={value}
       height="100%"
-      theme={oneDark}
+      theme={theme === "dark" ? oneDark : undefined}
       extensions={extensions}
       onChange={onChange}
       onCreateEditor={(view) => {

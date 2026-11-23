@@ -6,6 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 import { terminalSocket } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/lib/theme";
 
 export function TerminalPanel({
   workspaceId,
@@ -18,6 +19,7 @@ export function TerminalPanel({
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const { theme } = useTheme();
   const [status, setStatus] = useState<"connecting" | "connected" | "closed" | "error">("connecting");
   const [generation, setGeneration] = useState(0);
 
@@ -33,7 +35,7 @@ export function TerminalPanel({
       lineHeight: 1.35,
       scrollback: 5000,
       allowTransparency: true,
-      theme: {
+      theme: theme === "dark" ? {
         background: "#0b0d10",
         foreground: "#d6dde8",
         cursor: "#7dd3fc",
@@ -55,6 +57,28 @@ export function TerminalPanel({
         brightMagenta: "#d8b4fe",
         brightCyan: "#67e8f9",
         brightWhite: "#f8fafc",
+      } : {
+        background: "#ffffff",
+        foreground: "#1f2937",
+        cursor: "#0284c7",
+        cursorAccent: "#ffffff",
+        selectionBackground: "#0ea5e933",
+        black: "#334155",
+        red: "#dc2626",
+        green: "#16a34a",
+        yellow: "#ca8a04",
+        blue: "#2563eb",
+        magenta: "#9333ea",
+        cyan: "#0891b2",
+        white: "#f1f5f9",
+        brightBlack: "#64748b",
+        brightRed: "#ef4444",
+        brightGreen: "#22c55e",
+        brightYellow: "#eab308",
+        brightBlue: "#3b82f6",
+        brightMagenta: "#a855f7",
+        brightCyan: "#06b6d4",
+        brightWhite: "#0f172a",
       },
     });
     const fit = new FitAddon();
@@ -138,7 +162,7 @@ export function TerminalPanel({
       fitRef.current = null;
       socketRef.current = null;
     };
-  }, [workspaceId, generation]);
+  }, [workspaceId, generation, theme]);
 
   useEffect(() => {
     if (!visible) return;
@@ -158,7 +182,7 @@ export function TerminalPanel({
   }, [visible]);
 
   return (
-    <div className="flex h-full flex-col bg-[#0b0d10]">
+    <div className={cn("flex h-full flex-col", theme === "dark" ? "bg-[#0b0d10]" : "bg-white")}>
       <div className="flex h-8 shrink-0 items-center justify-between border-b px-2">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
-  Braces,
   Bug,
   ChevronDown,
   Circle,
@@ -43,6 +42,9 @@ import { GitPanel } from "@/components/editor/GitPanel";
 import { TerminalPanel } from "@/components/editor/TerminalPanel";
 import { CommandPalette, paletteIcons, type PaletteAction } from "@/components/editor/CommandPalette";
 import { DebugPanel } from "@/components/editor/DebugPanel";
+import { Logo } from "@/components/Logo";
+import { LanguageToggle, useI18n } from "@/lib/i18n";
+import { ThemeToggle } from "@/lib/theme";
 
 type SideView = "explorer" | "search" | "git" | "debug" | "settings";
 
@@ -70,6 +72,7 @@ export function IDE({
   onExit: () => void;
   onWorkspaceChanged: () => void;
 }) {
+  const { t } = useI18n();
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activePath, setActivePath] = useState("");
   const [view, setView] = useState<SideView>("explorer");
@@ -423,11 +426,9 @@ export function IDE({
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Back to workspaces</TooltipContent>
+            <TooltipContent>{t("ide.back")}</TooltipContent>
           </Tooltip>
-          <div className="flex h-7 w-7 items-center justify-center rounded border border-primary/25 bg-primary/10">
-            <Braces className="h-3.5 w-3.5 text-primary" />
-          </div>
+          <Logo className="h-7 w-7 rounded-md" />
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-xs font-medium">{workspace.name}</span>
             {workspace.source === "git" && workspace.branch && (
@@ -439,6 +440,8 @@ export function IDE({
           </div>
 
           <div className="ml-auto flex items-center gap-1">
+            <LanguageToggle compact />
+            <ThemeToggle compact />
             <button
               className="hidden h-7 min-w-[180px] items-center gap-2 rounded-md border bg-background/40 px-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent md:flex"
               onClick={() => setPaletteOpen(true)}
@@ -692,7 +695,7 @@ export function IDE({
                     </div>
                     <pre
                       ref={outputRef}
-                      className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-[#0b0d10] p-3 font-code text-[11px] leading-5 text-slate-300"
+                      className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-muted/50 p-3 font-code text-[11px] leading-5 text-muted-foreground"
                     >
                       {output}
                     </pre>
@@ -782,7 +785,7 @@ function ActivityBar({
     { id: "debug", icon: <Bug className="h-[18px] w-[18px]" />, label: "Run & debug (F5)" },
   ];
   return (
-    <div className="flex w-11 shrink-0 flex-col items-center border-r bg-[#0a0c0f] py-1">
+    <div className="flex w-11 shrink-0 flex-col items-center border-r bg-panel py-1">
       {items.map((item) => (
         <Tooltip key={item.id}>
           <TooltipTrigger asChild>
@@ -849,9 +852,7 @@ function WelcomePane({
     <div className="flex h-full items-center justify-center overflow-auto p-8">
       <div className="w-full max-w-2xl animate-fade-in">
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-xl border border-primary/25 bg-primary/10">
-            <Braces className="h-5 w-5 text-primary" />
-          </div>
+          <Logo className="h-11 w-11 rounded-xl" />
           <div>
             <h1 className="text-xl font-semibold tracking-tight">{workspace.name}</h1>
             <p className="font-code text-[10px] text-muted-foreground">{workspace.rootPath}</p>

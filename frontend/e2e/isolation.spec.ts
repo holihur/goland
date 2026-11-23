@@ -9,6 +9,7 @@ const bobEmail = `bob-${stamp}@test.local`;
 const password = "member-password-1";
 const alicePath = `/root/goland/.data/workspaces/e2e-alice-${stamp}`;
 let aliceWorkspaceID = "";
+let alice: Awaited<ReturnType<typeof apiLogin>>;
 
 async function apiLogin(request: APIRequestContext, email: string, pass: string) {
   const response = await request.post("/api/auth/login", { data: { email, password: pass } });
@@ -35,7 +36,7 @@ test.beforeAll(async ({ request }) => {
     expect(response.status()).toBe(201);
   }
   mkdirSync(alicePath, { recursive: true });
-  const alice = await apiLogin(request, aliceEmail, password);
+  alice = await apiLogin(request, aliceEmail, password);
   const response = await request.post("/api/workspaces", {
     headers: { "X-CSRF-Token": alice.csrf },
     data: { name: `alice-e2e-${stamp}`, source: "local", path: alicePath },
@@ -46,7 +47,6 @@ test.beforeAll(async ({ request }) => {
 
 test.afterAll(async ({ request }) => {
   try {
-    const alice = await apiLogin(request, aliceEmail, password);
     await request.delete(`/api/workspaces/${aliceWorkspaceID}`, {
       headers: { "X-CSRF-Token": alice.csrf },
     });
@@ -58,7 +58,6 @@ test.afterAll(async ({ request }) => {
 
 test("tenant isolation across API and UI", async ({ browser, request }) => {
   test.setTimeout(300_000);
-  const alice = await apiLogin(request, aliceEmail, password);
   const aliceWorkspaces = await request.get("/api/workspaces", {
     headers: { "X-CSRF-Token": alice.csrf },
   });
@@ -96,7 +95,6 @@ test("tenant isolation across API and UI", async ({ browser, request }) => {
 
 test("file tree create, save, rename and delete", async ({ browser, request }) => {
   test.setTimeout(120_000);
-  const alice = await apiLogin(request, aliceEmail, password);
   const page = await browser.newPage();
   await uiLogin(page, aliceEmail);
   await page.getByText(`alice-e2e-${stamp}`, { exact: true }).click();
@@ -148,7 +146,6 @@ func main() { println("e2e") }
 
 test("editor save, dirty close confirm and 409 conflict", async ({ browser, request }) => {
   test.setTimeout(300_000);
-  const alice = await apiLogin(request, aliceEmail, password);
   const put = async (path: string, content: string, etag?: string) => {
     const response = await request.put(`/api/workspaces/${aliceWorkspaceID}/file`, {
       headers: { "X-CSRF-Token": alice.csrf },
@@ -276,7 +273,6 @@ test("terminal runs as workspace UID, resizes and cleans up processes", async ({
 
 test("task runner streams Go/pnpm output, cancels process tree and isolates history", async ({ browser, request }) => {
   test.setTimeout(300_000);
-  const alice = await apiLogin(request, aliceEmail, password);
   const put = async (path: string, content: string) => {
     const response = await request.put(`/api/workspaces/${aliceWorkspaceID}/file`, {
       headers: { "X-CSRF-Token": alice.csrf },
@@ -358,7 +354,6 @@ function debugProcesses(root: string, markers: string[]) {
 
 test("Go DAP breakpoints, stepping, continue and cleanup", async ({ browser, request }) => {
   test.setTimeout(600_000);
-  const alice = await apiLogin(request, aliceEmail, password);
   const put = async (path: string, content: string) => {
     const response = await request.put(`/api/workspaces/${aliceWorkspaceID}/file`, {
       headers: { "X-CSRF-Token": alice.csrf },
@@ -395,7 +390,6 @@ test("Go DAP breakpoints, stepping, continue and cleanup", async ({ browser, req
 
 test("Node DAP breakpoint, variables and cleanup", async ({ browser, request }) => {
   test.setTimeout(240_000);
-  const alice = await apiLogin(request, aliceEmail, password);
   const put = async (path: string, content: string) => {
     const response = await request.put(`/api/workspaces/${aliceWorkspaceID}/file`, {
       headers: { "X-CSRF-Token": alice.csrf },
@@ -430,7 +424,6 @@ test("Node DAP breakpoint, variables and cleanup", async ({ browser, request }) 
 
 test("IDE shell, shortcuts, terminal, Git panel and narrow viewport", async ({ browser, request }) => {
   test.setTimeout(240_000);
-  const alice = await apiLogin(request, aliceEmail, password);
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -489,7 +482,6 @@ test("IDE shell, shortcuts, terminal, Git panel and narrow viewport", async ({ b
 
 test("Browser CDP debugging with source maps and cleanup", async ({ browser, request }) => {
   test.setTimeout(600_000);
-  const alice = await apiLogin(request, aliceEmail, password);
   const put = async (path: string, content: string) => {
     const response = await request.put(`/api/workspaces/${aliceWorkspaceID}/file`, {
       headers: { "X-CSRF-Token": alice.csrf },
