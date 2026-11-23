@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend lint and tests
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:8.0
+        ports:
+          - 27019:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Check formatting
+        run: test -z "$(gofmt -l backend)" || { gofmt -l backend; exit 1; }
+      - name: Vet
+        run: cd backend && go vet ./...
+      - name: Test with coverage
+        run: |
+          cd backend
+          go test ./... -coverprofile=/tmp/goland-cover.out
+          ../scripts/check-go-coverage.sh /tmp/goland-cover.out 70
+
+  frontend:
+    name: Frontend lint, tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install
+        run: cd frontend && pnpm install --frozen-lockfile
+      - name: Lint
+        run: cd frontend && pnpm lint
+      - name: Typecheck
+        run: cd frontend && pnpm typecheck
+      - name: Unit tests with coverage
+        run: cd frontend && pnpm test:coverage
+      - name: Build
+        run: cd frontend && pnpm build
+
+  source-limits:
+    name: Source file limits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce 800-line source files
+        run: ./scripts/check-file-length.sh
+
+  compose:
+    name: Compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: docker compose -f deploy/compose.yml config > /dev/null
