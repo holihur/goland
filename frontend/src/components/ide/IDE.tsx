@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Bug,
@@ -31,16 +31,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CodeEditor } from "@/components/editor/CodeEditor";
 import { FileExplorer } from "@/components/editor/FileExplorer";
 import { SearchPanel } from "@/components/editor/SearchPanel";
 import { GitPanel } from "@/components/editor/GitPanel";
-import { TerminalPanel } from "@/components/editor/TerminalPanel";
 import { CommandPalette, paletteIcons, type PaletteAction } from "@/components/editor/CommandPalette";
-import { DebugPanel } from "@/components/editor/DebugPanel";
 import { useI18n } from "@/lib/i18n";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { ActivityBar, CheckDot, ReferencesDialog, WelcomePane, WorkspaceSettings, type SideView } from "./IDEparts";
+
+const CodeEditor = lazy(() => import("@/components/editor/CodeEditor").then((module) => ({ default: module.CodeEditor })));
+const TerminalPanel = lazy(() => import("@/components/editor/TerminalPanel").then((module) => ({ default: module.TerminalPanel })));
+const DebugPanel = lazy(() => import("@/components/editor/DebugPanel").then((module) => ({ default: module.DebugPanel })));
 
 interface Tab {
   path: string;
@@ -537,13 +538,15 @@ export function IDE({
                 />
               )}
               {view === "debug" && (
-                <DebugPanel
-                  workspace={workspace}
-                  activePath={activeTab?.path ?? ""}
-                  breakpoints={breakpoints}
-                  onBreakpointsChange={setBreakpoints}
-                  onOpenLocation={(location) => void openLocation(location)}
-                />
+                <Suspense fallback={<div className="p-3 text-xs text-muted-foreground">Loading debugger…</div>}>
+                  <DebugPanel
+                    workspace={workspace}
+                    activePath={activeTab?.path ?? ""}
+                    breakpoints={breakpoints}
+                    onBreakpointsChange={setBreakpoints}
+                    onOpenLocation={(location) => void openLocation(location)}
+                  />
+                </Suspense>
               )}
               {view === "settings" && <WorkspaceSettings workspace={workspace} />}
             </aside>
@@ -610,6 +613,7 @@ export function IDE({
                     </div>
                   </div>
                 ) : (
+                  <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">Loading editor…</div>}>
                   <CodeEditor
                     key={activeTab.path}
                     path={activeTab.path}
@@ -630,6 +634,7 @@ export function IDE({
                     breakpoints={breakpoints[activeTab.path] ?? []}
                     onCursorChange={setCursorLine}
                   />
+                  </Suspense>
                 )
               ) : (
                 <WelcomePane workspace={workspace} onOpen={() => setView("explorer")} onTerminal={() => setTerminalOpen(true)} />
@@ -674,7 +679,9 @@ export function IDE({
                   </button>
                 </div>
                 <div className={cn("min-h-0 flex-1", bottomView !== "terminal" && "hidden")}>
-                  <TerminalPanel workspaceId={workspace.id} visible={terminalOpen && bottomView === "terminal"} />
+                  <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">Loading terminal…</div>}>
+                    <TerminalPanel workspaceId={workspace.id} visible={terminalOpen && bottomView === "terminal"} />
+                  </Suspense>
                 </div>
                 {bottomView === "output" && (
                   <div className="flex min-h-0 flex-1 flex-col">
