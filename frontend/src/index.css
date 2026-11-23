@@ -1,0 +1,138 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 16% 7%;
+    --foreground: 213 20% 92%;
+    --card: 220 14% 9%;
+    --card-foreground: 213 20% 92%;
+    --popover: 220 14% 10%;
+    --popover-foreground: 213 20% 92%;
+    --primary: 199 89% 55%;
+    --primary-foreground: 220 20% 6%;
+    --secondary: 218 13% 15%;
+    --secondary-foreground: 213 18% 90%;
+    --muted: 218 12% 14%;
+    --muted-foreground: 216 10% 58%;
+    --accent: 218 14% 17%;
+    --accent-foreground: 210 20% 96%;
+    --destructive: 0 68% 52%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 218 13% 19%;
+    --input: 218 13% 20%;
+    --ring: 199 89% 55%;
+    --radius: 0.5rem;
+    --editor: 220 16% 7%;
+    --panel: 220 14% 9%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    overflow: hidden;
+  }
+
+  ::selection {
+    background: hsl(199 89% 55% / 0.25);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(218 13% 24%);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(218 13% 32%);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+}
+
+@layer utilities {
+  .font-code {
+    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-variant-ligatures: none;
+  }
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.35) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.35) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+}
+
+.cm-theme,
+.cm-theme-dark {
+  height: 100%;
+}
+.cm-editor {
+  height: 100%;
+  font-size: 13px;
+}
+.cm-scroller {
+  overflow: auto;
+}
+.cm-editor .cm-scroller {
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  line-height: 1.65;
+}
+.cm-editor.cm-focused {
+  outline: none !important;
+}
+.cm-gutters {
+  background: hsl(var(--editor)) !important;
+  border-right: 1px solid hsl(var(--border) / 0.6) !important;
+  color: hsl(var(--muted-foreground) / 0.55) !important;
+}
+.cm-activeLineGutter {
+  background: hsl(var(--accent) / 0.55) !important;
+}
+.cm-activeLine {
+  background: hsl(var(--accent) / 0.35) !important;
+}
+.cm-breakpoint-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: -1px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: #f87171;
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.16);
+  vertical-align: middle;
+}
+.xterm {
+  padding: 10px 12px;
+  height: 100%;
+}
+.xterm-viewport {
+  background: transparent !important;
+}

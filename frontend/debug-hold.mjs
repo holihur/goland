@@ -1,0 +1,10 @@
+import { chromium } from '@playwright/test';
+const browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1400,height:900}});
+await page.goto('http://127.0.0.1:5173',{waitUntil:'domcontentloaded',timeout:60000});
+const login=page.waitForResponse(r=>r.url().includes('/api/auth/login')&&r.status()===200,{timeout:30000});
+await page.getByRole('button',{name:/Sign in/}).click();await login;await page.getByText('New workspace',{exact:true}).waitFor();
+await page.getByText('demo',{exact:true}).first().click();await page.waitForTimeout(500);
+await page.getByText('web',{exact:true}).first().click();await page.waitForTimeout(300);await page.getByText('server.js',{exact:true}).last().click();await page.waitForTimeout(1000);
+await page.keyboard.press('F5');await page.waitForTimeout(700);await page.getByRole('button',{name:'node',exact:true}).click();
+await page.getByRole('button',{name:/Start debugging/}).click();
+console.log('started');await page.waitForTimeout(60000);await browser.close();

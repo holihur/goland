@@ -1,0 +1,114 @@
+# Goland Web IDE toolchain and tasks.
+# Install everything with: mise install
+# Then run tasks with:     mise run <task>
+
+min_version = "2024.9.0"
+
+[tools]
+go = "1.27.4"
+node = "26.12.1"
+"npm:pnpm" = "12.15.0"
+
+[env]
+GOMAXPROCS = "1"
+GOGC = "40"
+GOMEMLIMIT = "500MiB"
+NODE_OPTIONS = "--max-old-space-size=512"
+
+[tasks.install]
+description = "Install backend and frontend dependencies"
+run = [
+  "cd backend && go mod download",
+  "cd frontend && pnpm install",
+]
+
+[tasks."db:start"]
+description = "Start the development MongoDB on 127.0.0.1:27019"
+run = """
+mkdir -p .data/mongo .data/logs
+if mongosh --quiet --port 27019 --eval 'quit(db.runCommand({ping:1}).ok ? 0 : 1)' >/dev/null 2>&1; then
+  echo "MongoDB already running on 27019"
+  exit 0
+fi
+mongod --dbpath "$PWD/.data/mongo" --port 27019 --bind_ip 127.0.0.1 \
+  --logpath "$PWD/.data/logs/mongod.log" \
+  --pidfilepath "$PWD/.data/mongo/mongod.pid" --fork
+"""
+
+[tasks."db:stop"]
+description = "Stop the development MongoDB"
+run = """
+if [ -f .data/mongo/mongod.pid ]; then
+  kill "$(cat .data/mongo/mongod.pid)" 2>/dev/null || true
+  rm -f .data/mongo/mongod.pid
+fi
+"""
+
+[tasks."dev:api"]
+description = "Run the Go API (serving the built SPA) on 0.0.0.0:8788"
+run = """
+mise run db:start
+cd backend && GOLAND_ADDR="${GOLAND_ADDR:-0.0.0.0:8788}" GOLAND_DATA_DIR="$PWD/../.data" GOLAND_WORKSPACE_ROOTS="$PWD/../.data/workspaces" GOLAND_WEB_DIST="$PWD/../frontend/dist" GOLAND_DEV_PERMISSIONS=true GOLAND_GOPLS="$PWD/../bin/tools/gopls" GOLAND_TSSERVER="$PWD/../frontend/node_modules/.bin/typescript-language-server" GOLAND_DLV="$PWD/../bin/tools/dlv" GOLAND_JS_DEBUG="$PWD/../deploy/js-debug/src/dapDebugServer.js" GOLAND_CHROME="/root/.cache/ms-playwright/chromium-1255/chrome-linux64/chrome" go run ./cmd/server
+"""
+
+[tasks."dev:web"]
+description = "Run the Vite dev server on 127.0.0.1:5173"
+run = "cd frontend && pnpm dev"
+
+[tasks.dev]
+description = "Build the SPA, then run MongoDB and the Go API serving it"
+run = """
+mise run db:start
+(cd frontend && pnpm build)
+cd backend && GOLAND_ADDR="${GOLAND_ADDR:-0.0.0.0:8788}" GOLAND_DATA_DIR="$PWD/../.data" GOLAND_WORKSPACE_ROOTS="$PWD/../.data/workspaces" GOLAND_WEB_DIST="$PWD/../frontend/dist" GOLAND_DEV_PERMISSIONS=true GOLAND_GOPLS="$PWD/../bin/tools/gopls" GOLAND_TSSERVER="$PWD/../frontend/node_modules/.bin/typescript-language-server" GOLAND_DLV="$PWD/../bin/tools/dlv" GOLAND_JS_DEBUG="$PWD/../deploy/js-debug/src/dapDebugServer.js" GOLAND_CHROME="/root/.cache/ms-playwright/chromium-1255/chrome-linux64/chrome" go run ./cmd/server
+"""
+
+[tasks.build]
+description = "Build the SPA and the production Go binary"
+run = [
+  "cd frontend && pnpm build",
+  "rm -rf backend/web/dist && mkdir -p backend/web",
+  "cp -r frontend/dist backend/web/dist",
+  "cd backend && go build -trimpath -o ../bin/goland ./cmd/server",
+]
+
+[tasks.test]
+description = "Run backend and frontend unit tests"
+run = [
+  "cd backend && go test ./...",
+  "cd frontend && pnpm test",
+]
+
+[tasks."test:e2e"]
+description = "Run Playwright end-to-end tests"
+run = "cd frontend && pnpm test:e2e"
+
+[tasks.lint]
+description = "Run Go vet and frontend lint/typecheck"
+run = [
+  "cd backend && go vet ./...",
+  "cd frontend && pnpm lint && pnpm typecheck",
+]
+
+[tasks."compose:up"]
+description = "Start the production stack with Docker Compose"
+run = "docker compose -f deploy/compose.yml up -d --build"
+
+[tasks."compose:down"]
+description = "Stop the production stack"
+run = "docker compose -f deploy/compose.yml down"
+
+[tasks.tools]
+description = "Install developer language/debug tools"
+run = [
+  "GOBIN=$PWD/.data/bin go install golang.org/x/tools/gopls@latest",
+  "GOBIN=$PWD/.data/bin go install github.com/go-delve/delve/cmd/dlv@latest",
+  "cd frontend && pnpm install --ignore-scripts",
+  "cd frontend && pnpm add -D typescript-language-server@latest typescript@latest",
+]
+
+[tasks.clean]
+description = "Remove build artifacts (keeps MongoDB data)"
+run = [
+  "rm -rf bin frontend/dist backend/web/dist",
+]

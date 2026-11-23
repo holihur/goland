@@ -1,0 +1,13 @@
+.data/
+bin/
+node_modules/
+frontend/dist/
+backend/web/dist/
+frontend/test-results/
+frontend/playwright-report/
+.env
+*.log
+.DS_Store
+coverage/
+
+.pi/

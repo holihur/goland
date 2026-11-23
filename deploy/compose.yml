@@ -1,0 +1,59 @@
+name: goland
+
+services:
+  mongo:
+    image: mongo:8.0
+    restart: unless-stopped
+    command: ["mongod", "--bind_ip_all", "--quiet"]
+    volumes:
+      - mongo-data:/data/db
+    expose:
+      - "27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.runCommand({ping:1}).ok ? 0 : 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+      network: host
+    restart: unless-stopped
+    environment:
+      GOLAND_ADDR: 0.0.0.0:8788
+      GOLAND_MONGO_URI: mongodb://mongo:27017
+      GOLAND_MONGO_DB: ${GOLAND_MONGO_DB:-goland}
+      GOLAND_DATA_DIR: /data
+      GOLAND_WORKSPACE_ROOTS: /data/workspaces
+      GOLAND_ADMIN_EMAIL: ${GOLAND_ADMIN_EMAIL:-admin@goland.local}
+      GOLAND_ADMIN_PASSWORD: ${GOLAND_ADMIN_PASSWORD:-admin123456}
+      GOLAND_ADMIN_NAME: ${GOLAND_ADMIN_NAME:-Administrator}
+      GOLAND_SESSION_TTL: ${GOLAND_SESSION_TTL:-168h}
+      GOLAND_SECURE_COOKIES: ${GOLAND_SECURE_COOKIES:-false}
+      GOLAND_ALLOWED_ORIGINS: ${GOLAND_ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      GOLAND_GOPLS: /opt/goland/bin/gopls
+      GOLAND_DLV: /opt/goland/bin/dlv
+      GOLAND_TSSERVER: /opt/goland/bin/typescript-language-server
+      GOLAND_JS_DEBUG: /opt/goland/js-debug/src/dapDebugServer.js
+      GOLAND_CHROME: /usr/bin/chromium
+      CHROME_BIN: /usr/bin/chromium
+    volumes:
+      - goland-data:/data
+    ports:
+      - "${GOLAND_PORT:-8080}:8788"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8788/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+volumes:
+  mongo-data:
+  goland-data:
