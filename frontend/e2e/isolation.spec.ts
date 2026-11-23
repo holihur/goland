@@ -103,7 +103,7 @@ test("tenant isolation across API and UI", async ({ browser, request }) => {
 test("workspace creation from UI and file search", async ({ browser, request }) => {
   test.setTimeout(180_000);
   alice = await apiLogin(request, aliceEmail, password);
-  const path = `/root/goland/.data/workspaces/e2e-ui-${stamp}`;
+  const path = `${repoRoot}/.data/workspaces/e2e-ui-${stamp}`;
   mkdirSync(path, { recursive: true });
   writeFileSync(`${path}/search-me.go`, "package searchme\n");
   const name = `ui-${stamp}`;
@@ -283,11 +283,11 @@ test("terminal runs as workspace UID, resizes and cleans up processes", async ({
   const rows = page.locator(".xterm-rows");
   await page.keyboard.type("clear; pwd; id -u; go version; pnpm --version");
   await page.keyboard.press("Enter");
-  await expect.poll(async () => await rows.innerText(), { timeout: 25_000 }).toContain("12.15.0");
+  await expect.poll(async () => await rows.innerText(), { timeout: 25_000 }).toMatch(/\n\d+\.\d+\.\d+\n/);
   let screen = await rows.innerText();
   expect(screen).not.toContain("uid=0");
   expect(screen).toContain("go version go");
-  expect(screen).toContain("12.15.0");
+  expect(screen).toMatch(/\n\d+\.\d+\.\d+\n/);
   expect(Number((screen.match(/\n(\d{5,})\n/) ?? [])[1] ?? 0)).toBeGreaterThan(1000);
 
   await page.keyboard.type("echo SIZE1:$(stty size)");

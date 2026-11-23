@@ -179,6 +179,18 @@ test("window management: resize, dock, split, drag, persist and reset", async ({
   expect(keys.some((key) => key.startsWith("goland.layout.") && key.endsWith(workspaceID))).toBe(true);
 
   // Reload restores groups, tabs, sidebar width and the bottom dock view.
+  await page.waitForFunction(
+    (id) => {
+      const key = Object.keys(localStorage).find(
+        (candidate) => candidate.startsWith("goland.layout.") && candidate.endsWith(id),
+      );
+      if (!key) return false;
+      const stored = JSON.parse(localStorage.getItem(key) ?? "{}") as { bottomOpen?: boolean; bottomView?: string };
+      return stored.bottomOpen === true && stored.bottomView === "output";
+    },
+    workspaceID,
+    { timeout: 10_000 },
+  );
   await page.reload();
   await expect(page.getByText("Explorer", { exact: true })).toBeVisible({ timeout: 60_000 });
   await expect(groups).toHaveCount(3);

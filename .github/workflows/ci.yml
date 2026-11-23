@@ -32,10 +32,17 @@ jobs:
         run: test -z "$(gofmt -l backend)" || { gofmt -l backend; exit 1; }
       - name: Vet
         run: cd backend && go vet ./...
+      - name: Configure git identity
+        run: |
+          git config --global user.name "Goland CI"
+          git config --global user.email "ci@goland.local"
+          sudo git config --global user.name "Goland CI"
+          sudo git config --global user.email "ci@goland.local"
       - name: Test with coverage
         run: |
           cd backend
-          go test ./... -coverprofile=/tmp/goland-cover.out
+          # Workspace isolation tests provision Unix users and require root.
+          sudo -E env "PATH=$PATH" "HOME=$HOME" go test ./... -coverprofile=/tmp/goland-cover.out
           ../scripts/check-go-coverage.sh /tmp/goland-cover.out 70
 
   frontend:

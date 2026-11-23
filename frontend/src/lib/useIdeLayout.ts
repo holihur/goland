@@ -58,7 +58,17 @@ export function useIdeLayout(userId: string, workspaceId: string) {
   }, [layout, userId, workspaceId]);
 
   useEffect(() => {
-    return () => saveLayout(storage(), userId, workspaceId, layoutRef.current);
+    const flush = () => saveLayout(storage(), userId, workspaceId, layoutRef.current);
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+      flush();
+    };
   }, [userId, workspaceId]);
 
   useEffect(() => {
