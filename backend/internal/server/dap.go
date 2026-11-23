@@ -114,6 +114,17 @@ func (s *Server) debugWS(w http.ResponseWriter, r *http.Request) {
 
 	s.audit(r, "debug.start", ws.ID.Hex(), kind)
 	s.log.Info("debug session connected", "kind", kind, "workspace", ws.ID.Hex(), "id", sess.id, "adapter", sess.address)
+	trace := os.Getenv("GOLAND_DEBUG_DAP_TRACE") != ""
+	traceFrame := func(direction string, body []byte) {
+		if !trace {
+			return
+		}
+		text := string(body)
+		if len(text) > 2000 {
+			text = text[:2000] + "…"
+		}
+		s.log.Info("dap trace", "direction", direction, "kind", kind, "body", text)
+	}
 
 	var writeMu sync.Mutex
 	writeWS := func(body []byte) error {
@@ -143,6 +154,7 @@ func (s *Server) debugWS(w http.ResponseWriter, r *http.Request) {
 				_ = conn2.Close()
 				return
 			}
+			traceFrame("adapter->client", body)
 			if err := writeWS(body); err != nil {
 				return
 			}
@@ -157,6 +169,7 @@ func (s *Server) debugWS(w http.ResponseWriter, r *http.Request) {
 		if len(payload) == 0 || len(payload) > 16<<20 {
 			continue
 		}
+		traceFrame("client->adapter", payload)
 		if err := writeTCP(payload); err != nil {
 			return
 		}

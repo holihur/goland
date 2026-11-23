@@ -63,7 +63,15 @@ func (s *Server) startBrowser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := randomID()
-	dir := filepath.Join(identity.Home, "tmp", "chrome-"+id)
+	// Chromium's process-singleton Unix socket lives inside the profile dir; long
+	// workspace home paths (CI) exceed the socket path limit, so use /tmp.
+	base := filepath.Join(os.TempDir(), "goland-browser")
+	if err := os.MkdirAll(base, 0o711); err != nil {
+		writeError(w, http.StatusInternalServerError, "chrome_failed", err.Error())
+		return
+	}
+	_ = os.Chmod(base, 0o711)
+	dir := filepath.Join(base, "chrome-"+id)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		writeError(w, http.StatusInternalServerError, "chrome_failed", err.Error())
 		return
