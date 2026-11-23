@@ -1,56 +1,32 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  Bug,
-  ChevronDown,
-  Circle,
-  Command as CommandIcon,
-  FileCode2,
-  GitBranch,
-  Loader2,
-  PanelBottom,
-  Play,
-  Save,
-  Search,
-  Settings2,
-  TerminalSquare,
-  X,
-} from "lucide-react";
+import { Columns2, FileCode2, GitBranch, Maximize2, RotateCcw, Rows2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError, taskSocket } from "@/lib/api";
 import type { Diagnostic, TaskInfo, User, Workspace } from "@/lib/types";
 import { LSPClient, languageForPath, type SourceLocation } from "@/lib/lsp";
 import { cn, fileLanguage } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { FileExplorer } from "@/components/editor/FileExplorer";
 import { SearchPanel } from "@/components/editor/SearchPanel";
 import { GitPanel } from "@/components/editor/GitPanel";
 import { CommandPalette, paletteIcons, type PaletteAction } from "@/components/editor/CommandPalette";
-import { useI18n } from "@/lib/i18n";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { ActivityBar, CheckDot, ReferencesDialog, WelcomePane, WorkspaceSettings, type SideView } from "./IDEparts";
+import { BottomPanel } from "./BottomPanel";
+import { EditorGroups, type EditorTab as Tab } from "./EditorGroups";
+import { IdeHeader } from "./IdeHeader";
+import { ResizeDivider } from "./ResizeDivider";
+import { useIdeLayout } from "@/lib/useIdeLayout";
+import {
+  DEFAULT_BOTTOM_HEIGHT,
+  DEFAULT_SIDEBAR_WIDTH,
+  activeGroupIdOf,
+  groupOfPath,
+  type SplitDirection,
+} from "@/lib/layout";
 
 const CodeEditor = lazy(() => import("@/components/editor/CodeEditor").then((module) => ({ default: module.CodeEditor })));
-const TerminalPanel = lazy(() => import("@/components/editor/TerminalPanel").then((module) => ({ default: module.TerminalPanel })));
 const DebugPanel = lazy(() => import("@/components/editor/DebugPanel").then((module) => ({ default: module.DebugPanel })));
-
-interface Tab {
-  path: string;
-  name: string;
-  content: string;
-  etag?: string;
-  binary: boolean;
-  dirty: boolean;
-}
 
 function tabName(path: string) {
   return path.split("/").pop() ?? path;
@@ -67,13 +43,39 @@ export function IDE({
   onExit: () => void;
   onWorkspaceChanged: () => void;
 }) {
-  const { t } = useI18n();
   const [tabs, setTabs] = useState<Tab[]>([]);
-  const [activePath, setActivePath] = useState("");
-  const [view, setView] = useState<SideView>("explorer");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [terminalOpen, setTerminalOpen] = useState(true);
-  const [bottomView, setBottomView] = useState<"terminal" | "output">("terminal");
+  const {
+    layout,
+    compact,
+    sidebarMax,
+    maxBottomHeight,
+    restoredPaths,
+    activePath,
+    setSidebarWidth,
+    setSidebarOpen,
+    toggleSidebar,
+    setSideView: showSideView,
+    setBottomView,
+    setBottomOpen,
+    setBottomMaximized,
+    setBottomHeight,
+    openBottom,
+    toggleBottom,
+    assignTab,
+    unassignTab,
+    selectTab,
+    focusGroup,
+    moveTabToGroup,
+    split,
+    closeEditorGroup,
+    reset,
+  } = useIdeLayout(user.id, workspace.id);
+  const view = layout.sideView;
+  const sidebarOpen = layout.sidebarOpen;
+  const terminalOpen = layout.bottomOpen;
+  const bottomView = layout.bottomView;
+  const initialLayoutRef = useRef(layout);
+  const viewStateRef = useRef<Record<string, { line: number; scrollTop: number }>>({});
   const [treeKey, setTreeKey] = useState(0);
   const [gitKey, setGitKey] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -115,6 +117,45 @@ export function IDE({
   useEffect(() => {
     localStorage.setItem("goland.breakpoints", JSON.stringify(breakpoints));
   }, [breakpoints]);
+
+  useEffect(() => {
+    if (!restoredPaths.length) return;
+    let cancelled = false;
+    const restore = async () => {
+      for (const path of restoredPaths) {
+        try {
+          const file = await api.readFile(workspace.id, path);
+          if (cancelled) return;
+          setTabs((prev) =>
+            prev.some((tab) => tab.path === path)
+              ? prev
+              : [
+                  ...prev,
+                  {
+                    path,
+                    name: tabName(path),
+                    content: file.content ?? "",
+                    etag: file.etag,
+                    binary: file.binary,
+                    dirty: false,
+                  },
+                ],
+          );
+          setDiagnostics((current) => ({ ...current, [path]: current[path] ?? [] }));
+        } catch {
+          if (!cancelled) unassignTab(path);
+        }
+      }
+      const initial = initialLayoutRef.current;
+      const target = initial.groups[initial.activeGroupId]?.activePath;
+      const group = target ? groupOfPath(initial, target) : null;
+      if (!cancelled && group && target) selectTab(group, target);
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace.id, restoredPaths, unassignTab, selectTab]);
 
   const toggleBreakpoint = useCallback(
     (path: string, line: number) => {
@@ -186,8 +227,7 @@ export function IDE({
     (task: TaskInfo) => {
       taskSocketRef.current?.close();
       setRunningTask(task);
-      setBottomView("output");
-      setTerminalOpen(true);
+      openBottom("output");
       setOutput(`$ ${task.command} ${task.args.join(" ")}\n`);
       const socket = new WebSocket(taskSocket(workspace.id, task.id));
       taskSocketRef.current = socket;
@@ -239,7 +279,8 @@ export function IDE({
       if (!path) return;
       const existing = tabs.find((tab) => tab.path === path);
       if (existing) {
-        if (focus) setActivePath(path);
+        const group = groupOfPath(layout, path);
+        if (focus && group) selectTab(group, path);
         return;
       }
       try {
@@ -255,13 +296,13 @@ export function IDE({
             dirty: false,
           },
         ]);
-        if (focus) setActivePath(path);
+        assignTab(path);
         setDiagnostics((current) => ({ ...current, [path]: [] }));
       } catch (err) {
         toast.error(err instanceof ApiError ? err.message : "Could not open file");
       }
     },
-    [tabs, workspace.id],
+    [tabs, workspace.id, layout, selectTab, assignTab],
   );
 
   const closeTab = (path: string) => {
@@ -273,9 +314,7 @@ export function IDE({
     const language = languageForPath(path);
     if (language) lspRef.current[language]?.closeDocument(path);
     setTabs(next);
-    if (activePath === path) {
-      setActivePath(next[Math.min(index, next.length - 1)]?.path ?? "");
-    }
+    unassignTab(path);
   };
 
   const updateContent = (path: string, content: string) => {
@@ -336,15 +375,25 @@ export function IDE({
         setPaletteOpen(true);
       } else if (mod && event.key === "`") {
         event.preventDefault();
-        setTerminalOpen((value) => !value);
-        setBottomView("terminal");
+        toggleBottom();
       } else if (mod && event.key.toLowerCase() === "b") {
         event.preventDefault();
-        setSidebarOpen((value) => !value);
+        toggleSidebar();
+      } else if (mod && event.altKey && event.code === "Backslash") {
+        event.preventDefault();
+        if (layout.rows.flat().length > 1) closeEditorGroup(activeGroupIdOf(layout));
+      } else if (mod && event.altKey && event.key === "0") {
+        event.preventDefault();
+        reset(tabs.map((tab) => tab.path), activePath);
+      } else if (mod && event.shiftKey && event.code === "Backslash") {
+        event.preventDefault();
+        if (!compact) split("down");
+      } else if (mod && event.code === "Backslash") {
+        event.preventDefault();
+        if (!compact) split("right");
       } else if (event.key === "F5") {
         event.preventDefault();
-        setView("debug");
-        setSidebarOpen(true);
+        showSideView("debug");
       } else if (event.key === "F9") {
         event.preventDefault();
         if (activePath) toggleBreakpoint(activePath, cursorLine);
@@ -352,7 +401,21 @@ export function IDE({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activePath, saveTab, cursorLine, toggleBreakpoint]);
+  }, [
+    activePath,
+    saveTab,
+    cursorLine,
+    toggleBreakpoint,
+    layout,
+    tabs,
+    compact,
+    toggleBottom,
+    toggleSidebar,
+    closeEditorGroup,
+    reset,
+    split,
+    showSideView,
+  ]);
 
   const openLocation = useCallback(
     async (location: SourceLocation) => {
@@ -362,13 +425,28 @@ export function IDE({
     [openFile],
   );
 
-  const setSideView = (next: SideView) => {
+  const selectSideView = (next: SideView) => {
     if (view === next && sidebarOpen) {
       setSidebarOpen(false);
     } else {
-      setView(next);
-      setSidebarOpen(true);
+      showSideView(next);
     }
+  };
+
+  const selectTabByPath = (path: string) => {
+    const group = groupOfPath(layout, path);
+    if (group) selectTab(group, path);
+  };
+
+  const rememberCursor = (path: string, line: number) => {
+    const current = viewStateRef.current[path] ?? { line: 1, scrollTop: 0 };
+    viewStateRef.current[path] = { ...current, line };
+    if (path === activePath) setCursorLine(line);
+  };
+
+  const rememberScroll = (path: string, scrollTop: number) => {
+    const current = viewStateRef.current[path] ?? { line: 1, scrollTop: 0 };
+    viewStateRef.current[path] = { ...current, scrollTop };
   };
 
   const paletteActions: PaletteAction[] = [
@@ -384,30 +462,100 @@ export function IDE({
       label: "Toggle terminal",
       hint: "⌘`",
       icon: paletteIcons.terminal,
-      run: () => {
-        setTerminalOpen((value) => !value);
-        setBottomView("terminal");
-      },
+      run: () => toggleBottom(),
     },
     {
       id: "explorer",
       label: "Show explorer",
       icon: paletteIcons.explorer,
-      run: () => {
-        setView("explorer");
-        setSidebarOpen(true);
-      },
+      run: () => showSideView("explorer"),
     },
     {
       id: "git",
       label: "Show source control",
       icon: <GitBranch className="h-3.5 w-3.5" />,
+      run: () => showSideView("git"),
+    },
+    {
+      id: "split-right",
+      label: "Split editor right",
+      hint: "⌘\\",
+      icon: <Columns2 className="h-3.5 w-3.5" />,
       run: () => {
-        setView("git");
-        setSidebarOpen(true);
+        if (!compact) split("right");
       },
     },
+    {
+      id: "split-down",
+      label: "Split editor down",
+      hint: "⌘⇧\\",
+      icon: <Rows2 className="h-3.5 w-3.5" />,
+      run: () => {
+        if (!compact) split("down");
+      },
+    },
+    {
+      id: "close-group",
+      label: "Close editor group",
+      hint: "⌘⌥\\",
+      icon: <X className="h-3.5 w-3.5" />,
+      run: () => {
+        if (layout.rows.flat().length > 1) closeEditorGroup(activeGroupIdOf(layout));
+      },
+    },
+    {
+      id: "maximize-panel",
+      label: layout.bottomMaximized ? "Restore panel size" : "Maximize panel",
+      icon: <Maximize2 className="h-3.5 w-3.5" />,
+      run: () => setBottomMaximized(!layout.bottomMaximized),
+    },
+    {
+      id: "reset-layout",
+      label: "Reset layout",
+      hint: "⌘⌥0",
+      icon: <RotateCcw className="h-3.5 w-3.5" />,
+      run: () => reset(tabs.map((tab) => tab.path), activePath),
+    },
   ];
+
+  const renderEditor = (path: string) => {
+    const tab = tabs.find((item) => item.path === path);
+    if (!tab) return null;
+    if (tab.binary) {
+      return (
+        <div className="grid h-full place-items-center">
+          <div className="max-w-sm text-center">
+            <FileCode2 className="mx-auto h-9 w-9 text-muted-foreground" />
+            <h2 className="mt-3 text-sm font-medium">Binary file</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{path} cannot be displayed in the text editor.</p>
+          </div>
+        </div>
+      );
+    }
+    const state = viewStateRef.current[path];
+    const language = languageForPath(path);
+    return (
+      <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">Loading editor…</div>}>
+        <CodeEditor
+          key={path}
+          path={path}
+          value={tab.content}
+          onChange={(value) => updateContent(path, value)}
+          onSave={() => void saveTab(path)}
+          diagnostics={diagnostics[path] ?? []}
+          lsp={language === "go" ? lspClients.go : language === "typescript" ? lspClients.typescript : null}
+          jumpTo={jumpTo?.path === path ? jumpTo : null}
+          onOpenLocation={(location) => void openLocation(location)}
+          onReferences={(locations) => setReferences(locations)}
+          breakpoints={breakpoints[path] ?? []}
+          initialCursorLine={state?.line ?? 0}
+          initialScrollTop={state?.scrollTop ?? 0}
+          onCursorChange={(line) => rememberCursor(path, line)}
+          onScrollChange={(scrollTop) => rememberScroll(path, scrollTop)}
+        />
+      </Suspense>
+    );
+  };
 
   const lineCount = activeTab && !activeTab.binary ? activeTab.content.split("\n").length : 0;
   const problems = Object.values(diagnostics).reduce((count, items) => count + items.length, 0);
@@ -415,111 +563,29 @@ export function IDE({
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex h-full flex-col overflow-hidden bg-background">
-        <header className="flex h-10 shrink-0 items-center gap-2 border-b px-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" onClick={onExit}>
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t("ide.back")}</TooltipContent>
-          </Tooltip>
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-xs font-medium">{workspace.name}</span>
-            {workspace.source === "git" && workspace.branch && (
-              <span className="flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 font-code text-[9px] text-muted-foreground">
-                <GitBranch className="h-2.5 w-2.5" />
-                {workspace.branch}
-              </span>
-            )}
-          </div>
-
-          <div className="ml-auto flex items-center gap-1">
-            <button
-              className="hidden h-7 min-w-[180px] items-center gap-2 rounded-md border bg-background/40 px-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent md:flex"
-              onClick={() => setPaletteOpen(true)}
-            >
-              <Search className="h-3 w-3" />
-              <span>Search files…</span>
-              <kbd className="ml-auto flex items-center gap-0.5 font-code text-[9px]">
-                <CommandIcon className="h-2.5 w-2.5" />K
-              </kbd>
-            </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1 text-[11px]">
-                  <Play className="h-3.5 w-3.5 text-emerald-400" /> Run
-                  <ChevronDown className="h-3 w-3 opacity-60" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel>Run &amp; test</DropdownMenuLabel>
-                {tasks.length === 0 && (
-                  <DropdownMenuItem disabled>
-                    <Play className="h-4 w-4" /> No Go or pnpm tasks found
-                  </DropdownMenuItem>
-                )}
-                {tasks.map((task) => (
-                  <DropdownMenuItem key={task.id} onSelect={() => runTask(task)}>
-                    {task.kind === "go" ? (
-                      <Play className="h-4 w-4 text-sky-400" />
-                    ) : (
-                      <TerminalSquare className="h-4 w-4 text-amber-300" />
-                    )}
-                    <span className="truncate font-code text-[11px]">{task.label}</span>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setTerminalOpen(true);
-                    setBottomView("terminal");
-                  }}
-                >
-                  <TerminalSquare className="h-4 w-4" /> Open terminal
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" onClick={() => setSideView("debug")}>
-                  <Bug className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Debug</TooltipContent>
-            </Tooltip>
-            <div className="mx-1 h-4 w-px bg-border" />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="grid h-6 w-6 place-items-center rounded-full bg-sky-500 text-[10px] font-semibold text-white">
-                  {user.name.slice(0, 1).toUpperCase()}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuLabel>
-                  <div className="text-xs text-foreground">{user.name}</div>
-                  <div className="mt-0.5 truncate text-[10px] font-normal">{user.email}</div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setSideView("settings")}>
-                  <Settings2 className="h-4 w-4" /> Workspace info
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
-                  <Settings2 className="h-4 w-4" /> {t("settings.open")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={onExit}>
-                  <ArrowLeft className="h-4 w-4" /> All workspaces
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </header>
+        <IdeHeader
+          workspace={workspace}
+          user={user}
+          tasks={tasks}
+          onExit={onExit}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onRunTask={runTask}
+          onOpenTerminal={() => openBottom("terminal")}
+          onShowDebug={() => showSideView("debug")}
+          onShowSettings={() => showSideView("settings")}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
 
         <div className="flex min-h-0 flex-1">
-          <ActivityBar view={view} sidebarOpen={sidebarOpen} onSelect={setSideView} onPalette={() => setPaletteOpen(true)} />
+          <ActivityBar view={view} sidebarOpen={sidebarOpen} onSelect={selectSideView} onPalette={() => setPaletteOpen(true)} />
 
           {sidebarOpen && (
-            <aside className="flex w-[270px] shrink-0 flex-col border-r bg-panel">
+            <>
+            <aside
+              data-testid="sidebar"
+              className="flex shrink-0 flex-col border-r bg-panel"
+              style={{ width: layout.sidebarWidth }}
+            >
               {view === "explorer" && (
                 <FileExplorer
                   workspaceId={workspace.id}
@@ -550,160 +616,92 @@ export function IDE({
               )}
               {view === "settings" && <WorkspaceSettings workspace={workspace} />}
             </aside>
+            <ResizeDivider
+              axis="x"
+              value={layout.sidebarWidth}
+              min={180}
+              max={sidebarMax}
+              label="Resize sidebar"
+              onChange={setSidebarWidth}
+              onReset={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
+            />
+            </>
           )}
 
-          <main className="flex min-w-0 flex-1 flex-col">
-            <div className="flex h-9 shrink-0 items-stretch overflow-x-auto border-b bg-panel/60 [scrollbar-width:none]">
-              {tabs.map((tab) => (
-                <div
-                  key={tab.path}
-                  role="tab"
-                  aria-selected={tab.path === activePath}
-                  className={cn(
-                    "group flex min-w-[110px] max-w-[220px] shrink-0 cursor-pointer items-center gap-1.5 border-r px-3 text-[11px]",
-                    tab.path === activePath
-                      ? "border-t border-t-primary bg-editor text-foreground"
-                      : "text-muted-foreground hover:bg-accent/40",
-                  )}
-                  onClick={() => setActivePath(tab.path)}
-                  onAuxClick={(event) => event.button === 1 && closeTab(tab.path)}
-                >
-                  <FileCode2 className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-                  <span className="truncate">{tab.name}</span>
-                  {tab.dirty ? (
-                    <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" />
-                  ) : null}
-                  <button
-                    className={cn(
-                      "ml-auto grid h-4 w-4 shrink-0 place-items-center rounded hover:bg-background/70",
-                      !tab.dirty && "opacity-0 group-hover:opacity-100",
-                    )}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      closeTab(tab.path);
-                    }}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              <div className="ml-auto flex shrink-0 items-center px-1">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  title="Save"
-                  disabled={!activeTab?.dirty}
-                  onClick={() => activePath && void saveTab(activePath)}
-                >
-                  {saving === activePath ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                </Button>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 bg-editor">
-              {activeTab ? (
-                activeTab.binary ? (
-                  <div className="grid h-full place-items-center">
-                    <div className="max-w-sm text-center">
-                      <FileCode2 className="mx-auto h-9 w-9 text-muted-foreground" />
-                      <h2 className="mt-3 text-sm font-medium">Binary file</h2>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {activeTab.path} cannot be displayed in the text editor.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">Loading editor…</div>}>
-                  <CodeEditor
-                    key={activeTab.path}
-                    path={activeTab.path}
-                    value={activeTab.content}
-                    onChange={(value) => updateContent(activeTab.path, value)}
-                    onSave={() => void saveTab(activeTab.path)}
-                    diagnostics={diagnostics[activeTab.path] ?? []}
-                    lsp={
-                      languageForPath(activeTab.path) === "go"
-                        ? lspClients.go
-                        : languageForPath(activeTab.path) === "typescript"
-                          ? lspClients.typescript
-                          : null
-                    }
-                    jumpTo={jumpTo?.path === activeTab.path ? jumpTo : null}
-                    onOpenLocation={(location) => void openLocation(location)}
-                    onReferences={(locations) => setReferences(locations)}
-                    breakpoints={breakpoints[activeTab.path] ?? []}
-                    onCursorChange={setCursorLine}
-                  />
-                  </Suspense>
-                )
+          <main className="relative flex min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col">
+              {tabs.length === 0 ? (
+                <WelcomePane
+                  workspace={workspace}
+                  onOpen={() => showSideView("explorer")}
+                  onTerminal={() => openBottom("terminal")}
+                />
               ) : (
-                <WelcomePane workspace={workspace} onOpen={() => setView("explorer")} onTerminal={() => setTerminalOpen(true)} />
+                <EditorGroups
+                  layout={layout}
+                  compact={compact}
+                  tabs={tabs}
+                  savingPath={saving}
+                  renderEditor={renderEditor}
+                  onSelectTab={selectTabByPath}
+                  onCloseTab={closeTab}
+                  onSave={(path) => void saveTab(path)}
+                  onActivateGroup={focusGroup}
+                  onSplit={(direction: SplitDirection) => split(direction)}
+                  onCloseGroup={closeEditorGroup}
+                  onMoveTab={moveTabToGroup}
+                />
               )}
             </div>
 
             {terminalOpen && (
-              <div className="flex h-[230px] shrink-0 flex-col border-t">
-                <div className="flex h-8 shrink-0 items-center border-b bg-panel/70 px-2">
-                  <button
-                    className={cn(
-                      "flex h-full items-center gap-1.5 border-b px-2 text-[10px] uppercase tracking-wider",
-                      bottomView === "terminal" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
-                    )}
-                    onClick={() => setBottomView("terminal")}
-                  >
-                    <TerminalSquare className="h-3 w-3" /> Terminal
-                  </button>
-                  <button
-                    className={cn(
-                      "flex h-full items-center gap-1.5 border-b px-2 text-[10px] uppercase tracking-wider",
-                      bottomView === "output" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
-                    )}
-                    onClick={() => setBottomView("output")}
-                  >
-                    <PanelBottom className="h-3 w-3" /> Output
-                  </button>
-                  <button
-                    className={cn(
-                      "flex h-full items-center gap-1.5 border-b px-2 text-[10px] uppercase tracking-wider",
-                      problems > 0 ? "text-amber-300" : "text-muted-foreground",
-                    )}
-                    onClick={() => {
+              <>
+                {!layout.bottomMaximized && (
+                  <ResizeDivider
+                    axis="y"
+                    value={layout.bottomHeight}
+                    min={120}
+                    max={maxBottomHeight}
+                    label="Resize bottom panel"
+                    onChange={setBottomHeight}
+                    onReset={() => setBottomHeight(DEFAULT_BOTTOM_HEIGHT)}
+                  />
+                )}
+                <div
+                  className={
+                    layout.bottomMaximized
+                      ? "absolute inset-0 z-20 flex flex-col border-t bg-background"
+                      : "flex shrink-0 flex-col border-t"
+                  }
+                  style={layout.bottomMaximized ? undefined : { height: layout.bottomHeight }}
+                >
+                  <BottomPanel
+                    workspaceId={workspace.id}
+                    view={bottomView}
+                    maximized={layout.bottomMaximized}
+                    visible={terminalOpen}
+                    output={output}
+                    problems={problems}
+                    runningTask={runningTask}
+                    outputRef={outputRef}
+                    onSelectView={(next) => {
+                      setBottomView(next);
+                      setBottomOpen(true);
+                    }}
+                    onShowProblems={() => {
                       setBottomView("output");
+                      setBottomOpen(true);
                       setOutput(problems ? `${problems} problem(s) reported by language services.` : "No problems detected.");
                     }}
-                  >
-                    <Circle className="h-2 w-2" /> Problems {problems > 0 ? problems : ""}
-                  </button>
-                  <button aria-label="Close panel" title="Close panel" className="ml-auto grid h-6 w-6 place-items-center rounded hover:bg-accent" onClick={() => setTerminalOpen(false)}>
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                    onClose={() => {
+                      setBottomOpen(false);
+                      setBottomMaximized(false);
+                    }}
+                    onToggleMaximize={() => setBottomMaximized(!layout.bottomMaximized)}
+                    onStopTask={stopTask}
+                  />
                 </div>
-                <div className={cn("min-h-0 flex-1", bottomView !== "terminal" && "hidden")}>
-                  <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">Loading terminal…</div>}>
-                    <TerminalPanel workspaceId={workspace.id} visible={terminalOpen && bottomView === "terminal"} />
-                  </Suspense>
-                </div>
-                {bottomView === "output" && (
-                  <div className="flex min-h-0 flex-1 flex-col">
-                    <div className="flex h-7 shrink-0 items-center justify-between border-b px-2 text-[10px] text-muted-foreground">
-                      <span className="truncate font-code">
-                        {runningTask ? `running: ${runningTask.label}` : "output"}
-                      </span>
-                      {runningTask && (
-                        <button className="rounded px-1.5 py-0.5 text-red-300 hover:bg-red-500/10" onClick={stopTask}>
-                          Stop
-                        </button>
-                      )}
-                    </div>
-                    <pre
-                      ref={outputRef}
-                      className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-muted/50 p-3 font-code text-[11px] leading-5 text-muted-foreground"
-                    >
-                      {output}
-                    </pre>
-                  </div>
-                )}
-              </div>
+              </>
             )}
           </main>
         </div>

@@ -10,6 +10,7 @@ Implemented:
 - Local-directory workspaces and Git HTTPS clones.
 - Per-workspace unprivileged Unix UID; terminal, LSP, task and debug processes run as that UID.
 - File tree, CodeMirror tabs, editing/saving, conflict detection, search.
+- Window management: draggable sidebar/bottom-panel splitters, collapsible and maximizable panels, up to four editor groups with tabs dragged between groups, and per-user/workspace layout persistence.
 - gopls and typescript-language-server: diagnostics, completion, hover, definition, references, formatting.
 - xterm.js PTY terminal, Go/pnpm tasks with streamed output.
 - Delve DAP for Go and js-debug DAP for Node/TypeScript: breakpoints, call stack, variables.
@@ -23,9 +24,28 @@ Implemented:
 Verification status:
 
 - Go tests: 73% statement coverage, `go vet` and `gofmt` clean.
-- Frontend: ESLint, typecheck, 61 Vitest tests at 97%+ line coverage.
+- Frontend: ESLint, typecheck, 133 Vitest tests at 98% line coverage.
 - Playwright is configured to run the full suite in the GitHub Actions `E2E` workflow and upload reports, traces, screenshots and logs. Local Playwright runs are optional because the browser debug suite is resource-heavy.
 - Repeat the Compose cold-start check after infrastructure changes.
+
+## Layout and shortcuts
+
+The IDE layout is stored in `localStorage` under `goland.layout.<userId>.<workspaceId>`,
+so two users or two workspaces never share panel sizes or editor groups. Corrupt or
+out-of-range data falls back to the default layout.
+
+| Action | Shortcut |
+| --- | --- |
+| Toggle sidebar | `⌘/Ctrl+B` or click the active activity-bar icon |
+| Toggle terminal dock | `⌘/Ctrl+Backtick` |
+| Split editor right | `⌘/Ctrl+\` |
+| Split editor down | `⌘/Ctrl+Shift+\` |
+| Close active editor group | `⌘/Ctrl+Alt+\` |
+| Reset layout | `⌘/Ctrl+Alt+0` or the command palette |
+
+Splitters support pointer dragging, arrow keys, and double-click to reset. Drag a tab
+onto another editor group to move it; a file never appears in two groups at once.
+Below 900px viewport width the IDE renders only the active group and disables splitting.
 
 ## Toolchain
 

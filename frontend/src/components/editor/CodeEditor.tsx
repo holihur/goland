@@ -142,6 +142,9 @@ export function CodeEditor({
   jumpTo,
   breakpoints = [],
   onCursorChange,
+  initialCursorLine = 0,
+  initialScrollTop = 0,
+  onScrollChange,
 }: {
   path: string;
   value: string;
@@ -154,6 +157,10 @@ export function CodeEditor({
   jumpTo?: (SourceLocation & { nonce: number }) | null;
   breakpoints?: number[];
   onCursorChange?: (line: number) => void;
+  /** Restored when a tab is remounted after a group move or layout change. */
+  initialCursorLine?: number;
+  initialScrollTop?: number;
+  onScrollChange?: (scrollTop: number) => void;
 }) {
   const { theme } = useTheme();
   const viewRef = useRef<EditorView | null>(null);
@@ -167,6 +174,20 @@ export function CodeEditor({
   jumpRef.current = jumpTo;
   const cursorRef = useRef(onCursorChange);
   cursorRef.current = onCursorChange;
+  const scrollRef = useRef(onScrollChange);
+  scrollRef.current = onScrollChange;
+  const initialCursorRef = useRef(initialCursorLine);
+  const initialScrollRef = useRef(initialScrollTop);
+  const scrollHandlerRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      const view = viewRef.current;
+      const handler = scrollHandlerRef.current;
+      if (view && handler) view.scrollDOM.removeEventListener("scroll", handler);
+      scrollHandlerRef.current = null;
+    };
+  }, []);
 
   const extensions = useMemo(() => {
     const list = [
@@ -381,6 +402,19 @@ export function CodeEditor({
       onChange={onChange}
       onCreateEditor={(view) => {
         viewRef.current = view;
+        const handler = () => scrollRef.current?.(view.scrollDOM.scrollTop);
+        scrollHandlerRef.current = handler;
+        view.scrollDOM.addEventListener("scroll", handler, { passive: true });
+        if (initialScrollRef.current > 0) {
+          const scrollTop = initialScrollRef.current;
+          requestAnimationFrame(() => {
+            view.scrollDOM.scrollTop = scrollTop;
+          });
+        }
+        if (initialCursorRef.current > 1) {
+          const line = view.state.doc.line(Math.min(initialCursorRef.current, view.state.doc.lines));
+          view.dispatch({ selection: { anchor: line.from } });
+        }
       }}
       basicSetup={{
         lineNumbers: true,

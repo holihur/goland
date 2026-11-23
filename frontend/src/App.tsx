@@ -96,6 +96,7 @@ export default function App() {
     return (
       <Suspense fallback={<LoadingScreen label={t("app.opening")} />}>
         <IDE
+          key={selected.id}
           user={user}
           workspace={selected}
           onExit={() => {
