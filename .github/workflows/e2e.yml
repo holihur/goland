@@ -38,7 +38,7 @@ jobs:
       GOLAND_DLV: ${{ github.workspace }}/bin/tools/dlv
       GOLAND_TSSERVER: ${{ github.workspace }}/frontend/node_modules/.bin/typescript-language-server
       GOLAND_JS_DEBUG: ${{ github.workspace }}/deploy/js-debug/src/dapDebugServer.js
-      GOLAND_E2E_SERVER_LOG: ${{ github.workspace }}/.data/logs/e2e-server.log
+      GOLAND_E2E_SERVER_LOG: ${{ runner.temp }}/e2e-server.log
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -93,6 +93,9 @@ jobs:
             "GOLAND_JS_DEBUG=$GOLAND_JS_DEBUG" \
             "GOLAND_E2E_SERVER_LOG=$GOLAND_E2E_SERVER_LOG" \
             pnpm test:e2e
+      - name: Show backend log tail
+        if: always()
+        run: tail -300 "$GOLAND_E2E_SERVER_LOG" || true
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -101,7 +104,6 @@ jobs:
           path: |
             frontend/playwright-report
             frontend/test-results
-            .data/logs
-            .data/backend.log
+            ${{ runner.temp }}/e2e-server.log
           if-no-files-found: ignore
           retention-days: 14
