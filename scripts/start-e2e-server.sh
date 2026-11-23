@@ -15,6 +15,11 @@ export GOLAND_DLV="${GOLAND_DLV:-$root/bin/tools/dlv}"
 export GOLAND_JS_DEBUG="${GOLAND_JS_DEBUG:-$root/deploy/js-debug/src/dapDebugServer.js}"
 export GOLAND_CHROME="${GOLAND_CHROME:-/root/.cache/ms-playwright/chromium-1255/chrome-linux64/chrome}"
 
+if [ -n "${GOLAND_E2E_SERVER_LOG:-}" ]; then
+  mkdir -p "$(dirname "$GOLAND_E2E_SERVER_LOG")"
+  exec > >(tee -a "$GOLAND_E2E_SERVER_LOG") 2>&1
+fi
+
 if [ -n "${GOLAND_E2E_BINARY:-}" ]; then
   exec "$GOLAND_E2E_BINARY"
 fi
