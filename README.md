@@ -4,7 +4,7 @@ A self-hosted web IDE focused on **Go** and **TypeScript**. It combines a React 
 
 ## Status
 
-Implemented and manually exercised:
+Implemented:
 
 - Multi-user admin-created accounts, HttpOnly sessions, CSRF, RBAC.
 - Local-directory workspaces and Git HTTPS clones.
@@ -13,16 +13,19 @@ Implemented and manually exercised:
 - gopls and typescript-language-server: diagnostics, completion, hover, definition, references, formatting.
 - xterm.js PTY terminal, Go/pnpm tasks with streamed output.
 - Delve DAP for Go and js-debug DAP for Node/TypeScript: breakpoints, call stack, variables.
+- Browser CDP attach, source maps, breakpoints, call stack, variables and session cleanup.
 - Git status/diff/stage/commit/branches/checkout/fast-forward pull/push.
 - AES-256-GCM encrypted Git tokens.
 - Docker Compose production stack definitions.
+- Ten languages (including RTL), light/dark themes and a focused settings dialog.
+- Go and Vitest coverage gates, ESLint/typecheck, source file limit and GitHub Actions CI.
 
-Known gaps:
+Verification status:
 
-- Browser CDP attach, source-mapped pause, call stack, variables and browser-session cleanup are implemented; the automated browser E2E is still timing-flaky under the current low-memory host and is not yet a release gate.
-- Automated test suites (Go integration, Vitest, Playwright) and ESLint are not yet complete.
-- Compose was rebuilt and verified with the Go backend serving the SPA; repeat the cold-start test after infrastructure changes.
-- Git push and two-user isolation are covered by Go integration tests; full Playwright suite still needs a stable browser-debug run.
+- Go tests: 73% statement coverage, `go vet` and `gofmt` clean.
+- Frontend: ESLint, typecheck, 61 Vitest tests at 97%+ line coverage.
+- Playwright is configured to run the full suite in the GitHub Actions `E2E` workflow and upload reports, traces, screenshots and logs. Local Playwright runs are optional because the browser debug suite is resource-heavy.
+- Repeat the Compose cold-start check after infrastructure changes.
 
 ## Toolchain
 
@@ -46,9 +49,10 @@ mise run db:start
 mise run dev
 ```
 
-- UI: <http://127.0.0.1:5173>
-- API: <http://127.0.0.1:8788>
+- UI and API: <http://127.0.0.1:8788>
 - MongoDB: `127.0.0.1:27019`
+
+`mise run dev` builds `frontend/dist` and lets the Go backend serve both the SPA and `/api`.
 
 Default development administrator:
 
@@ -63,7 +67,7 @@ Change it in production.
 ```bash
 cp deploy/.env.example deploy/.env
 # edit deploy/.env
-GOLAND_PORT=8080 GOLAND_PORT=8080 docker compose -f deploy/compose.yml up -d --build
+GOLAND_PORT=8080 docker compose -f deploy/compose.yml up -d --build
 ```
 
 Open <http://localhost:8080>. The Go backend hosts both `/api` and the SPA. If 8080 is occupied, set another port, e.g. `GOLAND_PORT=18080`.
@@ -96,11 +100,17 @@ See `.env.example`. Important variables:
 | `GOLAND_GOPLS` / `GOLAND_TSSERVER` / `GOLAND_DLV` | Language/debug binaries |
 | `GOLAND_JS_DEBUG` / `GOLAND_CHROME` | js-debug adapter and Chromium path |
 
+## Continuous integration
+
+- `CI` runs backend formatting/vet/tests/coverage, frontend lint/typecheck/tests/build, Compose validation and the 800-line source file limit.
+- `E2E` runs the Playwright suite on `main` and on manual dispatch. It starts a root backend with Unix UID isolation, installs Chromium, gopls, Delve and the TypeScript language server, and uploads artifacts.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Security model](docs/security.md)
 - [Operations](docs/operations.md)
+- [Quality gates](docs/quality-gates.md)
 
 ## Layout
 
@@ -114,7 +124,11 @@ deploy/                  Compose, Dockerfiles, vendored js-debug
 ## Verification commands
 
 ```bash
-cd backend && go test ./...
-cd frontend && pnpm lint && pnpm test && pnpm build && pnpm test:e2e
+./scripts/check-file-length.sh
+cd backend && go test ./... -coverprofile=/tmp/goland-cover.out
+./scripts/check-go-coverage.sh /tmp/goland-cover.out 70
+cd frontend && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build
 docker compose -f deploy/compose.yml config
 ```
+
+Playwright runs in the `E2E` GitHub Actions workflow rather than the local iteration loop.

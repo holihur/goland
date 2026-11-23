@@ -9,8 +9,9 @@ mise run db:start
 mise run dev
 ```
 
-Frontend: http://127.0.0.1:5173
-API: http://127.0.0.1:8788
+UI and API: http://127.0.0.1:8788
+
+`mise run dev` builds the SPA and starts the Go backend, which serves both `/` and `/api`. Playwright runs in the `E2E` GitHub Actions workflow.
 
 ## Production (Go-hosted SPA)
 
@@ -39,3 +40,8 @@ Losing `master.key` makes stored Git tokens unreadable.
 ```bash
 docker compose -f deploy/compose.yml logs -f backend
 ```
+
+## CI
+
+- `CI` checks backend formatting, vet, tests and coverage, frontend lint/typecheck/tests/build, Compose configuration and the 800-line source limit.
+- `E2E` runs Playwright on `main` or by manual dispatch. Reports, traces, screenshots and server logs are uploaded as workflow artifacts.

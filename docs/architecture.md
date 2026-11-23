@@ -7,7 +7,7 @@ Browser
 Go backend :8788
   ├── /api/*        REST + CSRF + HttpOnly session
   ├── /api/ws/*     PTY, LSP, task, DAP, browser-session proxies
-  └── /*            React SPA (embedded dist in production)
+  └── /*            React SPA served from frontend/dist
         │
         ├── MongoDB   users/sessions/workspaces/tasks/audit
         └── filesystem
@@ -21,7 +21,7 @@ Browser sessions are started by the backend (`--remote-debugging-port=0`), then 
 
 ## Production image
 
-`deploy/backend.Dockerfile` builds the React SPA in a Node stage and copies `dist` into `/opt/goland/web`. The Go binary serves both API and SPA on port 8788. Compose publishes it as `GOLAND_PORT` (default 8080).
+`deploy/backend.Dockerfile` builds the React SPA in a Node stage and copies `dist` into `/opt/goland/web`. The Go binary serves both API and SPA on port 8788; it does not embed the assets in the binary. Compose publishes it as `GOLAND_PORT` (default 8080).
 
 ## Persistence
 

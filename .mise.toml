@@ -80,7 +80,7 @@ run = [
 ]
 
 [tasks."test:e2e"]
-description = "Run Playwright end-to-end tests"
+description = "Run Playwright locally (GitHub Actions E2E is the release gate)"
 run = "cd frontend && pnpm test:e2e"
 
 [tasks.lint]
