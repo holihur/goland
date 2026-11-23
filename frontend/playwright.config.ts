@@ -6,7 +6,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 180_000,
-  reporter: [["list"]],
+  reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }], ["json", { outputFile: "test-results/results.json" }]],
   use: {
     baseURL: "http://127.0.0.1:8788",
     trace: "retain-on-failure",
@@ -14,7 +14,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "cd .. && mise run dev:api",
+    command: "cd .. && ./scripts/start-e2e-server.sh",
     url: "http://127.0.0.1:8788/api/health",
     reuseExistingServer: true,
     timeout: 120_000,

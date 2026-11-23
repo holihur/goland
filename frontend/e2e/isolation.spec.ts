@@ -1,13 +1,17 @@
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Page } from "@playwright/test";
-import { mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
+import { resolve } from "node:path";
+
+const repoRoot = process.env.GOLAND_REPO_ROOT ?? resolve(process.cwd(), "..");
+const frontendRoot = process.env.GOLAND_FRONTEND_ROOT ?? process.cwd();
 
 const stamp = Date.now();
 const aliceEmail = `alice-${stamp}@test.local`;
 const bobEmail = `bob-${stamp}@test.local`;
 const password = "member-password-1";
-const alicePath = `/root/goland/.data/workspaces/e2e-alice-${stamp}`;
+const alicePath = `${repoRoot}/.data/workspaces/e2e-alice-${stamp}`;
 let aliceWorkspaceID = "";
 let alice: Awaited<ReturnType<typeof apiLogin>>;
 
@@ -18,10 +22,10 @@ async function apiLogin(request: APIRequestContext, email: string, pass: string)
   return { csrf: body.csrfToken as string, user: body.user as { id: string } };
 }
 
-async function uiLogin(page: Page, email: string) {
+async function uiLogin(page: Page, email: string, pass = password) {
   await page.goto("/");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password").fill(pass);
   await page.getByRole("button", { name: /Sign in/ }).click();
   await expect(page.getByText("New workspace", { exact: true })).toBeVisible({ timeout: 90_000 });
 }
@@ -96,8 +100,55 @@ test("tenant isolation across API and UI", async ({ browser, request }) => {
 });
 
 
+test("workspace creation from UI and file search", async ({ browser, request }) => {
+  test.setTimeout(180_000);
+  alice = await apiLogin(request, aliceEmail, password);
+  const path = `/root/goland/.data/workspaces/e2e-ui-${stamp}`;
+  mkdirSync(path, { recursive: true });
+  writeFileSync(`${path}/search-me.go`, "package searchme\n");
+  const name = `ui-${stamp}`;
+  const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+  await uiLogin(page, aliceEmail);
+  await page.getByRole("button", { name: "New workspace" }).click();
+  await page.getByLabel("Name (optional)").fill(name);
+  await page.getByLabel("Server directory").fill(path);
+  await page.getByRole("button", { name: "Add workspace" }).click();
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Explorer", { exact: true })).toBeVisible();
+
+  await page.getByLabel("Search", { exact: true }).click();
+  await page.getByPlaceholder("Filename or path…").fill("search-me");
+  await expect(page.locator("aside").getByText("search-me.go", { exact: true })).toBeVisible({ timeout: 20_000 });
+
+  const list = await (await request.get("/api/workspaces")).json();
+  const created = list.workspaces.find((workspace: { name: string }) => workspace.name === name);
+  if (created) {
+    await request.delete(`/api/workspaces/${created.id}`, { headers: { "X-CSRF-Token": alice.csrf } });
+  }
+  rmSync(path, { recursive: true, force: true });
+  await page.close();
+});
+
+test("admin user management from the UI", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+  await uiLogin(page, "admin@goland.local", "admin123456");
+  await page.locator("header button").last().click();
+  await page.getByText("Manage users", { exact: true }).click();
+  await expect(page.getByText("Users & access", { exact: true })).toBeVisible();
+  const email = `managed-${stamp}@test.local`;
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Display name").fill("Managed User");
+  await page.getByLabel("Temporary password").fill("managed-password-1");
+  await page.getByLabel("Role").selectOption("member");
+  await page.getByRole("button", { name: "Create user", exact: true }).click();
+  await expect(page.getByText(email, { exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.close();
+});
+
 test("file tree create, save, rename and delete", async ({ browser, request }) => {
   test.setTimeout(120_000);
+  alice = await apiLogin(request, aliceEmail, password);
   const page = await browser.newPage();
   await uiLogin(page, aliceEmail);
   await page.getByText(`alice-e2e-${stamp}`, { exact: true }).click();
@@ -259,9 +310,11 @@ test("terminal runs as workspace UID, resizes and cleans up processes", async ({
 
   await page.keyboard.type("sleep 60 & echo SLEEP_PID:$!");
   await page.keyboard.press("Enter");
-  await expect.poll(async () => await rows.innerText(), { timeout: 10_000 }).toContain("SLEEP_PID:");
+  await expect.poll(async () => {
+    const match = (await rows.innerText()).match(/SLEEP_PID:(\d+)/);
+    return match ? Number(match[1]) : 0;
+  }, { timeout: 10_000 }).toBeGreaterThan(0);
   const sleepPID = Number(((await rows.innerText()).match(/SLEEP_PID:(\d+)/) ?? [])[1]);
-  expect(sleepPID).toBeGreaterThan(0);
   await page.getByLabel("Close panel").click();
   await expect.poll(async () => {
     try {
@@ -456,6 +509,7 @@ test("IDE shell, shortcuts, terminal, Git panel and narrow viewport", async ({ b
   const uid = statSync(alicePath).uid;
   const gid = statSync(alicePath).gid;
   execFileSync("git", ["init", "-q"], { cwd: alicePath });
+  execFileSync("git", ["-c", "safe.directory=*", "add", "-A"], { cwd: alicePath });
   execFileSync("git", ["-c", "safe.directory=*", "-c", "user.email=e2e@test.local", "-c", "user.name=E2E", "commit", "--allow-empty", "-q", "-m", "initial"], { cwd: alicePath });
   execFileSync("chown", ["-R", `${uid}:${gid}`, alicePath]);
 
@@ -479,6 +533,11 @@ test("IDE shell, shortcuts, terminal, Git panel and narrow viewport", async ({ b
   await page.locator("#prompt-value").fill("e2e-feature");
   await page.getByRole("button", { name: "Create & switch", exact: true }).click();
   await expect(page.locator("aside select")).toHaveValue("e2e-feature");
+
+  // File search.
+  await page.getByLabel("Search", { exact: true }).click();
+  await page.getByPlaceholder("Filename or path…").fill("gitfile");
+  await expect(page.locator("aside").getByText("gitfile.txt", { exact: true })).toBeVisible({ timeout: 20_000 });
 
   // Command palette and narrow layout.
   await page.keyboard.press("Control+k");
@@ -508,7 +567,7 @@ test("Browser CDP debugging with source maps and cleanup", async ({ browser, req
   await put("web/app.ts", 'type User = { name: string };\n\nfunction greeting(user: User): string {\n  debugger;\n  const message = `Hello, ${user.name}`;\n  return message;\n}\n\nsetTimeout(() => {\n  const target = document.getElementById("app");\n  if (target) target.textContent = greeting({ name: "Ada" });\n}, 30000);\n');
   const uid = statSync(alicePath).uid;
   const gid = statSync(alicePath).gid;
-  execFileSync("/root/goland/frontend/node_modules/.bin/tsc", ["app.ts", "--target", "ES2022", "--module", "ES2022", "--sourceMap", "--outDir", "dist"], { cwd: `${alicePath}/web` });
+  execFileSync(resolve(frontendRoot, "node_modules/.bin/tsc"), ["app.ts", "--target", "ES2022", "--module", "ES2022", "--sourceMap", "--outDir", "dist"], { cwd: `${alicePath}/web` });
   execFileSync("chown", ["-R", `${uid}:${gid}`, alicePath]);
   const server = createServer((req, res) => {
     const rel = req.url === "/" ? "index.html" : (req.url ?? "").replace(/^\//, "");

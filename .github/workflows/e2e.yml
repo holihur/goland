@@ -1,0 +1,94 @@
+name: E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    name: Playwright (full suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      mongo:
+        image: mongo:8.0
+        ports:
+          - 27019:27017
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /opt/playwright
+      GOLAND_REPO_ROOT: ${{ github.workspace }}
+      GOLAND_FRONTEND_ROOT: ${{ github.workspace }}/frontend
+      GOLAND_E2E_BINARY: ${{ github.workspace }}/bin/goland-e2e
+      GOLAND_DATA_DIR: ${{ github.workspace }}/.data
+      GOLAND_WORKSPACE_ROOTS: ${{ github.workspace }}/.data/workspaces
+      GOLAND_WEB_DIST: ${{ github.workspace }}/frontend/dist
+      GOLAND_MONGO_URI: mongodb://127.0.0.1:27019
+      GOLAND_TEST_MONGO_URI: mongodb://127.0.0.1:27019
+      GOLAND_ISOLATION: user
+      GOLAND_DEV_PERMISSIONS: "true"
+      GOLAND_GOPLS: ${{ runner.temp }}/goland-tools/gopls
+      GOLAND_DLV: ${{ runner.temp }}/goland-tools/dlv
+      GOLAND_TSSERVER: ${{ github.workspace }}/frontend/node_modules/.bin/typescript-language-server
+      GOLAND_JS_DEBUG: ${{ github.workspace }}/deploy/js-debug/src/dapDebugServer.js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+      - name: Build SPA
+        run: cd frontend && pnpm build
+      - name: Build backend binary
+        run: |
+          mkdir -p bin
+          cd backend && go build -trimpath -o ../bin/goland-e2e ./cmd/server
+      - name: Install language/debug tools
+        run: |
+          GOBIN="$RUNNER_TEMP/goland-tools" go install golang.org/x/tools/gopls@latest
+          GOBIN="$RUNNER_TEMP/goland-tools" go install github.com/go-delve/delve/cmd/dlv@latest
+          chmod -R o+rx "$RUNNER_TEMP/goland-tools"
+          sudo chmod o+x /home/runner /home/runner/work "$RUNNER_TEMP"
+      - name: Install Playwright Chromium
+        run: |
+          sudo mkdir -p /opt/playwright
+          sudo chown "$USER:$(id -g)" /opt/playwright
+          cd frontend && pnpm exec playwright install --with-deps chromium
+          sudo chmod -R o+rx /opt/playwright
+      - name: Resolve Chromium path
+        run: |
+          cd frontend
+          chrome=$(node -e "console.log(require('@playwright/test').chromium.executablePath())")
+          echo "GOLAND_CHROME=$chrome" >> "$GITHUB_ENV"
+      - name: Run Playwright suite as root
+        run: |
+          cd frontend
+          sudo -E env "PATH=$PATH" "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" pnpm test:e2e
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            .data/logs
+          if-no-files-found: ignore
+          retention-days: 14
