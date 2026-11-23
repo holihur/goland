@@ -8,8 +8,6 @@ import {
   Plus,
   Search,
   Settings2,
-  Shield,
-  Sparkles,
   Trash2,
   Users,
 } from "lucide-react";
@@ -17,7 +15,6 @@ import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import type { User, Workspace } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -31,8 +28,8 @@ import { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
 import { AdminUsersDialog } from "./AdminUsersDialog";
 import { relativeTime } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
-import { LanguageToggle, useI18n } from "@/lib/i18n";
-import { ThemeToggle } from "@/lib/theme";
+import { useI18n } from "@/lib/i18n";
+import { SettingsDialog } from "@/components/SettingsDialog";
 
 export function WorkspaceHome({
   user,
@@ -51,6 +48,7 @@ export function WorkspaceHome({
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [usersOpen, setUsersOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const filtered = workspaces.filter((workspace) =>
     `${workspace.name} ${workspace.repoUrl ?? ""} ${workspace.rootPath}`.toLowerCase().includes(query.toLowerCase()),
   );
@@ -77,18 +75,9 @@ export function WorkspaceHome({
         <div className="flex items-center gap-2.5">
           <Logo className="h-7 w-7 rounded-md" />
           <span className="text-sm font-semibold tracking-tight">Goland</span>
-          <Badge variant="secondary" className="ml-1 text-[9px] uppercase tracking-wider">
-            web
-          </Badge>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-1.5 rounded-full border bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground md:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            {t("home.apiConnected")}
-          </div>
-          <LanguageToggle compact />
-          <ThemeToggle compact />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 rounded-md p-1 pr-2 transition-colors hover:bg-accent">
@@ -109,7 +98,7 @@ export function WorkspaceHome({
                   <Users className="h-4 w-4" /> {t("home.manageUsers")}
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onSelect={() => toast.info(t("home.settingsSoon"))}>
+              <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
                 <Settings2 className="h-4 w-4" /> {t("home.preferences")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -125,13 +114,7 @@ export function WorkspaceHome({
         <div className="mx-auto w-full max-w-6xl px-6 py-12">
           <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
             <div>
-              <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-primary">
-                <Sparkles className="h-3.5 w-3.5" /> {t("home.kicker")}
-              </div>
               <h1 className="text-3xl font-semibold tracking-[-0.03em]">{t("home.greeting", { name: user.name.split(" ")[0] })}</h1>
-              <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                {t("home.body")}
-              </p>
             </div>
             <Button className="h-9 shrink-0 gap-2" onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" /> {t("home.newWorkspace")}
@@ -238,15 +221,6 @@ export function WorkspaceHome({
             </div>
           )}
 
-          <div className="mt-12 flex flex-wrap items-center gap-4 rounded-lg border bg-card/30 px-4 py-3 text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Shield className="h-3.5 w-3.5 text-emerald-400" /> {t("home.isolation")}
-            </span>
-            <span className="hidden h-3 w-px bg-border sm:block" />
-            <span>{t("home.languageServices")}</span>
-            <span className="hidden h-3 w-px bg-border sm:block" />
-            <span>{t("home.encryptedGit")}</span>
-          </div>
         </div>
       </main>
 
@@ -260,6 +234,7 @@ export function WorkspaceHome({
         }}
       />
       <AdminUsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

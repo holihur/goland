@@ -13,6 +13,7 @@ export default defineConfig({
         "src/App.tsx",
         "src/components/LoginPage.tsx",
         "src/components/PromptDialog.tsx",
+        "src/components/SettingsDialog.tsx",
       ],
       exclude: ["src/lib/types.ts"],
       thresholds: { lines: 70, statements: 70, functions: 70, branches: 60 },
