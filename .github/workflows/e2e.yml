@@ -38,7 +38,6 @@ jobs:
       GOLAND_DLV: ${{ github.workspace }}/bin/tools/dlv
       GOLAND_TSSERVER: ${{ github.workspace }}/frontend/node_modules/.bin/typescript-language-server
       GOLAND_JS_DEBUG: ${{ github.workspace }}/deploy/js-debug/src/dapDebugServer.js
-      GOLAND_E2E_SERVER_LOG: ${{ runner.temp }}/e2e-server.log
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -80,6 +79,8 @@ jobs:
           chrome=$(node -e "console.log(require('@playwright/test').chromium.executablePath())")
           echo "GOLAND_CHROME=$chrome" >> "$GITHUB_ENV"
       - name: Run Playwright suite as root
+        env:
+          GOLAND_E2E_SERVER_LOG: ${{ runner.temp }}/e2e-server.log
         run: |
           cd frontend
           sudo -E env \
@@ -95,7 +96,7 @@ jobs:
             pnpm test:e2e
       - name: Show backend log tail
         if: always()
-        run: tail -300 "$GOLAND_E2E_SERVER_LOG" || true
+        run: tail -300 "$RUNNER_TEMP/e2e-server.log" || true
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
