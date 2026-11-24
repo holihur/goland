@@ -90,6 +90,7 @@ test("plugin install, enable, UI contributions, hooks and isolation", async ({ b
   await page.locator('[aria-label="Demo toolkit"]').first().click();
   const panel = page.getByTestId("plugin-panel-demo-demo.panel");
   await expect(panel).toBeVisible();
+  await panel.getByLabel("Query").fill("notes.txt");
   await panel.getByRole("button", { name: "Scan" }).click();
   await expect(panel.getByLabel("Demo toolkit output")).toContainText("notes.txt", { timeout: 20_000 });
 
