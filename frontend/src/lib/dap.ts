@@ -46,13 +46,17 @@ export class DAPClient {
   private onStartDebugging?: (configuration: Record<string, unknown>) => Promise<void>;
   private ignoreStartDebugging = false;
 
+  private socketUrl?: string;
+
   constructor(
     private workspaceId: string,
-    private kind: "go" | "node" | "browser",
+    private kind: string,
     private onError: (message: string) => void,
     adapterId = "",
+    socketUrl?: string,
   ) {
     this.adapterId = adapterId;
+    this.socketUrl = socketUrl;
     this.ready = new Promise((resolve, reject) => {
       this.resolveReady = resolve;
       this.rejectReady = reject;
@@ -61,7 +65,9 @@ export class DAPClient {
   }
 
   private connect() {
-    const socket = new WebSocket(debugSocket(this.workspaceId, this.kind, this.adapterId));
+    const socket = new WebSocket(
+      this.socketUrl ?? debugSocket(this.workspaceId, this.kind as "go" | "node" | "browser", this.adapterId),
+    );
     this.socket = socket;
     socket.onopen = () => this.resolveReady();
     socket.onerror = () => {

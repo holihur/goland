@@ -44,6 +44,74 @@ No backend endpoint or MongoDB schema is involved. `ResizeDivider`, `BottomPanel
 `EditorGroups` split the UI into testable components, and `IDE.tsx` keeps the existing
 tabs, LSP, PTY, task, Git and debug flows intact.
 
+## Plugin system
+
+```text
+Admin upload/path ──► internal/plugins.Installer ──► <data>/plugins/<id>/<version>/
+                                                   └► Mongo plugins + workspacePlugins
+Workspace owner ──► enable/config ──► HostManager ──► plugin process (workspace UID)
+                                                     │  JSON-RPC 2.0 over stdio
+Frontend ──► /api/workspaces/{id}/plugins             │  commands, hooks, ui/* notifications
+         └─► /api/ws/workspaces/{id}/plugins          │
+         └─► .../plugins/{plugin}/lsp/{server} ───────┘  stdio LSP/DAP framing
+```
+
+### Manifest and validation
+
+`internal/plugins/manifest.go` defines `pluginApiVersion: 1`: id, name, semver version,
+executable, and contributions (commands, panels, status, settings, hooks, editorActions,
+languages, debuggers). Parsing rejects unknown fields, oversized manifests, duplicate ids,
+commands outside the plugin-id namespace, invalid form fields, unknown command references
+and unsafe server paths. `ValidatePackage` additionally resolves every executable inside the
+installed directory and rejects symlink escapes.
+
+### Installation and storage
+
+`internal/plugins/install.go` accepts a local directory or zip. Extraction rejects absolute
+paths, `..`, backslashes, symlinks, duplicate entries, excessive depth, more than 2000 files
+and more than 64 MiB. Packages are staged and renamed into `plugins/<id>/<version>/`.
+`internal/store/plugins.go` persists installed packages and per-workspace enable/config
+records (`plugins` and `workspacePlugins` collections, unique per workspace+plugin).
+
+### Host process and protocol
+
+`internal/plugins/host.go` starts the manifest executable as the workspace UID with the
+workspace root as cwd and the identity environment (`HOME`, `TMPDIR`, caches). Messages are
+newline-delimited JSON-RPC 2.0; `initialize` receives workspace id, root and merged config;
+`health` must return `ok`. Requests have timeouts, output is capped, and crashes fail pending
+calls and surface a `crashed` event. `HostManager` keeps one host per workspace/plugin,
+restarts crashed hosts lazily and stops process groups on disable, uninstall, workspace
+delete or shutdown.
+
+Plugin notifications (`command/output`, `ui/status`, `ui/panel`, `ui/notify`, `log`) fan out
+through `pluginEventHub` to `/api/ws/workspaces/{id}/plugins`. Command execution is an
+authenticated `POST /plugins/{plugin}/commands/{command}` and can be cancelled with
+`POST /plugins/{plugin}/cancel`.
+
+### Hooks
+
+`internal/server/plugins_hooks.go` runs `onOpen` before returning file content, `onSave`
+before writing (chained content transforms), `preCommit` before Git commits, and `postPull`
+after a successful fast-forward. Each call is audited with plugin, hook, path and duration.
+Plugin errors follow the manifest `failure` policy (`open` skips, `closed` blocks).
+
+### Editor, language and debugger integration
+
+The frontend `usePlugins` hook loads workspace plugin state, subscribes to events and maps
+commands/panels/status/settings into the existing IDE. `usePluginContributions` builds
+palette commands and editor actions. `PluginPanel`, `PluginSettingsSection` and
+`PluginStatusBar` render only predefined field types (text, textarea, number, boolean,
+select) from the manifest. `LSPClient` and `DAPClient` accept a plugin-provided websocket
+URL, so plugin languages and debugger kinds reuse the existing diagnostics, completion,
+breakpoint, stack and variable code.
+
+### Security boundary
+
+Plugins are trusted code running as the workspace Unix user. The host controls UID, cwd,
+environment, timeouts, output, process cleanup and audit, but does not provide a capability
+sandbox or network namespace. Installation is admin-only; enablement requires workspace
+ownership; cross-tenant requests return 404. See [security.md](security.md#plugins).
+
 ## Persistence
 
 - MongoDB volume: users, sessions, workspace metadata, task history, audit.

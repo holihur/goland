@@ -226,3 +226,21 @@ describe("DAPClient shutdown", () => {
     client.dispose();
   });
 });
+
+describe("plugin debugger sockets", () => {
+  it("uses a plugin-provided websocket URL", async () => {
+    installWebSocket();
+    const client = new DAPClient(
+      "w1",
+      "demo.debug",
+      vi.fn(),
+      "",
+      "ws://127.0.0.1:8788/api/ws/workspaces/w1/plugins/demo/debug/demo.debug",
+    );
+    await tick();
+    expect(MockWebSocket.instances[0].url).toBe(
+      "ws://127.0.0.1:8788/api/ws/workspaces/w1/plugins/demo/debug/demo.debug",
+    );
+    client.dispose();
+  });
+});

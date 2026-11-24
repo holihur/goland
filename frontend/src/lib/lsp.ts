@@ -89,17 +89,20 @@ export class LSPClient {
   private readyReject!: (error: Error) => void;
   private opened = new Map<string, { version: number; text: string }>();
   private disposed = false;
-  readonly language: "go" | "typescript";
+  readonly language: string;
+  private socketUrl?: string;
 
   constructor(
     private workspaceId: string,
     private rootPath: string,
-    language: "go" | "typescript",
+    language: string,
     private onDiagnostics: (path: string, diagnostics: Diagnostic[]) => void,
     private onStatus: (status: Status) => void,
     private onError: (message: string) => void = () => undefined,
+    socketUrl?: string,
   ) {
     this.language = language;
+    this.socketUrl = socketUrl;
     this.ready = new Promise((resolve, reject) => {
       this.readyResolve = resolve;
       this.readyReject = reject;
@@ -109,7 +112,9 @@ export class LSPClient {
 
   private connect() {
     this.onStatus("connecting");
-    const socket = new WebSocket(lspSocket(this.workspaceId, this.language));
+    const socket = new WebSocket(
+      this.socketUrl ?? lspSocket(this.workspaceId, this.language as "go" | "typescript"),
+    );
     this.socket = socket;
     socket.onopen = () => {
       void this.initialize();

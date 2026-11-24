@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"goland/internal/files"
+	"goland/internal/plugins"
 )
 
 func (s *Server) listTree(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +37,18 @@ func (s *Server) readFile(w http.ResponseWriter, r *http.Request) {
 		mapFileError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, content)
+	hooks, err := s.runPluginHooks(r.Context(), ws, plugins.HookOpen, plugins.HookRequest{
+		Path: rel, Content: content.Content,
+	})
+	if err != nil {
+		writeHookError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, fileContentResponse{
+		Path: content.Path, Content: content.Content, ETag: content.ETag,
+		Size: content.Size, ModifiedAt: content.ModifiedAt, Binary: content.Binary,
+		PluginNotes: hooks.Notes,
+	})
 }
 
 func (s *Server) writeFile(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +68,22 @@ func (s *Server) writeFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_path", "path is required")
 		return
 	}
-	content, err := s.files.Write(ws, body.Path, body.Content, body.ETag)
+	existing := ""
+	if previous, err := s.files.Read(ws, body.Path); err == nil {
+		existing = previous.Content
+	}
+	hooks, err := s.runPluginHooks(r.Context(), ws, plugins.HookSave, plugins.HookRequest{
+		Path: body.Path, Content: body.Content, Existing: existing,
+	})
+	if err != nil {
+		writeHookError(w, err)
+		return
+	}
+	next := body.Content
+	if hooks.Content != nil {
+		next = *hooks.Content
+	}
+	content, err := s.files.Write(ws, body.Path, next, body.ETag)
 	if err != nil {
 		mapFileError(w, err)
 		return

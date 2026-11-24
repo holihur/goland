@@ -1,5 +1,11 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Columns2, FileCode2, Loader2, Rows2, Save, X } from "lucide-react";
+import { Columns2, FileCode2, Loader2, Puzzle, Rows2, Save, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   activeGroupIdOf,
@@ -35,6 +41,7 @@ export function EditorGroups({
   onSplit,
   onCloseGroup,
   onMoveTab,
+  editorActions = [],
 }: {
   layout: LayoutState;
   compact: boolean;
@@ -48,6 +55,7 @@ export function EditorGroups({
   onSplit: (direction: SplitDirection) => void;
   onCloseGroup: (groupId: string) => void;
   onMoveTab: (path: string, groupId: string) => void;
+  editorActions?: Array<{ id: string; title: string; onSelect: () => void }>;
 }) {
   const [dragPath, setDragPath] = useState("");
   const dragPathRef = useRef("");
@@ -168,6 +176,26 @@ export function EditorGroups({
                     );
                   })}
                   <div className="ml-auto flex shrink-0 items-center px-1">
+                    {activeTab && editorActions.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            aria-label="Editor actions"
+                            title="Editor actions"
+                            className="grid h-6 w-6 place-items-center rounded hover:bg-accent"
+                          >
+                            <Puzzle className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {editorActions.map((action) => (
+                            <DropdownMenuItem key={action.id} onSelect={action.onSelect}>
+                              {action.title}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                     <button
                       aria-label="Save file"
                       title="Save"

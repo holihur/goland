@@ -174,6 +174,14 @@ describe("EditorGroups", () => {
     expect(screen.queryByRole("button", { name: "Close editor group" })).toBeNull();
   });
 
+  it("renders plugin editor actions for the active tab", async () => {
+    const onSelect = vi.fn();
+    setup({ editorActions: [{ id: "demo.action", title: "Demo: Format", onSelect }] });
+    fireEvent.pointerDown(screen.getAllByRole("button", { name: "Editor actions" })[1], { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByText("Demo: Format"));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a placeholder for an empty group", () => {
     let layout = defaultLayout();
     layout = splitGroup(layout, "right", "group-2");

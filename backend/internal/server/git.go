@@ -3,9 +3,11 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"goland/internal/git"
+	"goland/internal/plugins"
 )
 
 func (s *Server) gitStatus(w http.ResponseWriter, r *http.Request) {
@@ -84,6 +86,26 @@ func (s *Server) gitCommit(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body, 64<<10) {
 		return
 	}
+	status, statusErr := s.git.Status(r.Context(), ws)
+	files := []string{}
+	branch := ws.Branch
+	if statusErr == nil {
+		branch = status.Branch
+		for i, file := range status.Files {
+			if i >= 200 {
+				break
+			}
+			files = append(files, file.Path)
+		}
+	}
+	_, hookErr := s.runPluginHooks(r.Context(), ws, plugins.HookPreCommit, plugins.HookRequest{
+		Path: "", Branch: branch, Files: files, Message: body.Message,
+		DiffStat: fmt.Sprintf("%d changed file(s)", len(files)),
+	})
+	if hookErr != nil {
+		writeHookError(w, hookErr)
+		return
+	}
 	user := currentUser(r)
 	out, err := s.git.Commit(r.Context(), ws, body.Message, user.Name, user.Email)
 	if err != nil {
@@ -159,6 +181,8 @@ func (s *Server) gitPull(w http.ResponseWriter, r *http.Request) {
 		s.gitError(w, err)
 		return
 	}
+	// Post-pull hooks are advisory: failures must not roll back a fast-forward.
+	_, _ = s.runPluginHooks(r.Context(), ws, plugins.HookPostPull, plugins.HookRequest{Branch: ws.Branch})
 	s.audit(r, "git.pull", ws.ID.Hex(), "")
 	writeJSON(w, http.StatusOK, map[string]any{"output": out})
 }

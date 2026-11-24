@@ -4,19 +4,22 @@ import { toast } from "sonner";
 import { api, ApiError, taskSocket } from "@/lib/api";
 import type { Diagnostic, TaskInfo, User, Workspace } from "@/lib/types";
 import { LSPClient, languageForPath, type SourceLocation } from "@/lib/lsp";
-import { cn, fileLanguage } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FileExplorer } from "@/components/editor/FileExplorer";
 import { SearchPanel } from "@/components/editor/SearchPanel";
 import { GitPanel } from "@/components/editor/GitPanel";
 import { CommandPalette, paletteIcons, type PaletteAction } from "@/components/editor/CommandPalette";
 import { SettingsDialog } from "@/components/SettingsDialog";
-import { ActivityBar, CheckDot, ReferencesDialog, WelcomePane, WorkspaceSettings, type SideView } from "./IDEparts";
+import { ActivityBar, ReferencesDialog, WelcomePane, WorkspaceSettings, type SideView } from "./IDEparts";
 import { BottomPanel } from "./BottomPanel";
 import { EditorGroups, type EditorTab as Tab } from "./EditorGroups";
 import { IdeHeader } from "./IdeHeader";
 import { ResizeDivider } from "./ResizeDivider";
 import { useIdeLayout } from "@/lib/useIdeLayout";
+import { usePluginContributions } from "@/lib/usePluginContributions";
+import { pluginLspSocket } from "@/lib/plugin-api";
+import { PluginSidebarPanel } from "@/components/plugins/PluginSidebarPanel";
+import { IdeFooter } from "./IdeFooter";
 import {
   DEFAULT_BOTTOM_HEIGHT,
   DEFAULT_SIDEBAR_WIDTH,
@@ -88,6 +91,7 @@ export function IDE({
   const outputRef = useRef<HTMLPreElement | null>(null);
   const [diagnostics, setDiagnostics] = useState<Record<string, Diagnostic[]>>({});
   const [cursorLine, setCursorLine] = useState(1);
+  const plugins = usePluginContributions(workspace.id, activePath, cursorLine);
   const [breakpoints, setBreakpoints] = useState<Record<string, number[]>>(() => {
     try {
       return JSON.parse(localStorage.getItem("goland.breakpoints") || "{}") as Record<string, number[]>;
@@ -95,14 +99,11 @@ export function IDE({
       return {};
     }
   });
-  const [lspClients, setLspClients] = useState<{ go: LSPClient | null; typescript: LSPClient | null }>({
-    go: null,
-    typescript: null,
-  });
+  const [lspClients, setLspClients] = useState<Record<string, LSPClient>>({});
   const [lspStatus, setLspStatus] = useState<Record<string, string>>({});
   const [jumpTo, setJumpTo] = useState<(SourceLocation & { nonce: number }) | null>(null);
   const [references, setReferences] = useState<SourceLocation[] | null>(null);
-  const lspRef = useRef<Partial<Record<"go" | "typescript", LSPClient>>>({});
+  const lspRef = useRef<Record<string, LSPClient>>({});
   const lspErrorNotified = useRef<Set<string>>(new Set());
 
   const activeTab = tabs.find((tab) => tab.path === activePath) ?? null;
@@ -172,26 +173,56 @@ export function IDE({
     [],
   );
 
+  const pluginLanguageForPath = (path: string) => {
+    const lower = path.toLowerCase();
+    for (const plugin of plugins.enabled) {
+      for (const language of plugin.manifest?.contributes.languages ?? []) {
+        if (language.extensions.some((extension) => lower.endsWith(extension))) {
+          return { plugin, language };
+        }
+      }
+    }
+    return null;
+  };
+
+  const lspTargetForPath = (path: string): { key: string; language: string; socketUrl?: string } | null => {
+    const builtin = languageForPath(path);
+    if (builtin) return { key: builtin, language: builtin };
+    const pluginLanguage = pluginLanguageForPath(path);
+    if (!pluginLanguage) return null;
+    return {
+      key: `plugin:${pluginLanguage.plugin.id}:${pluginLanguage.language.id}`,
+      language: pluginLanguage.language.languageId,
+      socketUrl: pluginLspSocket(workspace.id, pluginLanguage.plugin.id, pluginLanguage.language.id),
+    };
+  };
+
+  const lspClientForPath = (path: string): LSPClient | null => {
+    const target = lspTargetForPath(path);
+    return target ? (lspRef.current[target.key] ?? null) : null;
+  };
+
   useEffect(() => {
     const path = activeTab?.path;
     if (!path) return;
-    const language = languageForPath(path);
-    if (!language || lspRef.current[language]) return;
+    const target = lspTargetForPath(path);
+    if (!target || lspRef.current[target.key]) return;
     const client = new LSPClient(
       workspace.id,
       workspace.rootPath,
-      language,
+      target.language,
       (file, items) => setDiagnostics((current) => ({ ...current, [file]: items })),
-      (status) => setLspStatus((current) => ({ ...current, [language]: status })),
+      (status) => setLspStatus((current) => ({ ...current, [target.key]: status })),
       (message) => {
-        if (lspErrorNotified.current.has(language)) return;
-        lspErrorNotified.current.add(language);
+        if (lspErrorNotified.current.has(target.key)) return;
+        lspErrorNotified.current.add(target.key);
         toast.error(message);
       },
+      target.socketUrl,
     );
-    lspRef.current[language] = client;
-    setLspClients({ go: lspRef.current.go ?? null, typescript: lspRef.current.typescript ?? null });
-  }, [activeTab?.path, workspace.id, workspace.rootPath]);
+    lspRef.current[target.key] = client;
+    setLspClients({ ...lspRef.current });
+  }, [activeTab?.path, workspace.id, workspace.rootPath, plugins.plugins]);
 
   useEffect(() => {
     let alive = true;
@@ -311,8 +342,7 @@ export function IDE({
     const tab = tabs[index];
     if (tab.dirty && !window.confirm(`Close ${tab.name} without saving?`)) return;
     const next = tabs.filter((item) => item.path !== path);
-    const language = languageForPath(path);
-    if (language) lspRef.current[language]?.closeDocument(path);
+    lspClientForPath(path)?.closeDocument(path);
     setTabs(next);
     unassignTab(path);
   };
@@ -333,8 +363,7 @@ export function IDE({
             item.path === path ? { ...item, content: result.content ?? item.content, etag: result.etag, dirty: false } : item,
           ),
         );
-        const language = languageForPath(path);
-        if (language) void lspRef.current[language]?.saveDocument(path, tab.content).catch(() => undefined);
+        void lspClientForPath(path)?.saveDocument(path, tab.content).catch(() => undefined);
         toast.success(`Saved ${tab.name}`);
         setGitKey((value) => value + 1);
         onWorkspaceChanged();
@@ -516,6 +545,7 @@ export function IDE({
       icon: <RotateCcw className="h-3.5 w-3.5" />,
       run: () => reset(tabs.map((tab) => tab.path), activePath),
     },
+    ...plugins.pluginPaletteActions,
   ];
 
   const renderEditor = (path: string) => {
@@ -533,7 +563,6 @@ export function IDE({
       );
     }
     const state = viewStateRef.current[path];
-    const language = languageForPath(path);
     return (
       <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">Loading editor…</div>}>
         <CodeEditor
@@ -543,7 +572,7 @@ export function IDE({
           onChange={(value) => updateContent(path, value)}
           onSave={() => void saveTab(path)}
           diagnostics={diagnostics[path] ?? []}
-          lsp={language === "go" ? lspClients.go : language === "typescript" ? lspClients.typescript : null}
+          lsp={lspClients[lspTargetForPath(path)?.key ?? ""] ?? null}
           jumpTo={jumpTo?.path === path ? jumpTo : null}
           onOpenLocation={(location) => void openLocation(location)}
           onReferences={(locations) => setReferences(locations)}
@@ -577,7 +606,13 @@ export function IDE({
         />
 
         <div className="flex min-h-0 flex-1">
-          <ActivityBar view={view} sidebarOpen={sidebarOpen} onSelect={selectSideView} onPalette={() => setPaletteOpen(true)} />
+          <ActivityBar
+            view={view}
+            sidebarOpen={sidebarOpen}
+            onSelect={selectSideView}
+            onPalette={() => setPaletteOpen(true)}
+            pluginPanels={plugins.pluginPanels}
+          />
 
           {sidebarOpen && (
             <>
@@ -611,10 +646,26 @@ export function IDE({
                     breakpoints={breakpoints}
                     onBreakpointsChange={setBreakpoints}
                     onOpenLocation={(location) => void openLocation(location)}
+                    pluginDebuggers={plugins.enabled.flatMap((plugin) =>
+                      (plugin.manifest?.contributes.debuggers ?? []).map((dbg) => ({
+                        pluginId: plugin.id,
+                        pluginName: plugin.name,
+                        kind: dbg.kind,
+                        label: dbg.label,
+                      })),
+                    )}
                   />
                 </Suspense>
               )}
               {view === "settings" && <WorkspaceSettings workspace={workspace} />}
+              <PluginSidebarPanel
+                view={view}
+                plugins={plugins.enabled}
+                panels={plugins.panels}
+                outputs={plugins.outputs}
+                execute={plugins.execute}
+                cancel={plugins.cancel}
+              />
             </aside>
             <ResizeDivider
               axis="x"
@@ -650,6 +701,7 @@ export function IDE({
                   onSplit={(direction: SplitDirection) => split(direction)}
                   onCloseGroup={closeEditorGroup}
                   onMoveTab={moveTabToGroup}
+                  editorActions={plugins.pluginEditorActions}
                 />
               )}
             </div>
@@ -706,45 +758,15 @@ export function IDE({
           </main>
         </div>
 
-        <footer className="flex h-6 shrink-0 items-center justify-between border-t bg-panel px-2 text-[10px] text-muted-foreground">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1">
-              <GitBranch className="h-3 w-3" />
-              {workspace.branch || "local"}
-            </span>
-            {activeTab && (
-              <span>
-                {fileLanguage(activeTab.path)} · Ln {lineCount}
-                {activeTab.dirty ? " · modified" : ""}
-              </span>
-            )}
-            <span className="hidden items-center gap-1 sm:flex">
-              <CheckDot /> UTF-8
-            </span>
-            <span className="hidden sm:inline">Spaces: 2</span>
-            {(["go", "typescript"] as const).map((language) => {
-              const status = lspStatus[language];
-              if (!status) return null;
-              return (
-                <span key={language} className="hidden items-center gap-1 md:flex" title={`${language} language server: ${status}`}>
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 rounded-full",
-                      status === "ready" ? "bg-emerald-400" : status === "connecting" ? "bg-amber-400" : "bg-red-400",
-                    )}
-                  />
-                  {language === "go" ? "Go" : "TS"}
-                </span>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden md:inline">{workspace.rootPath}</span>
-            <span className="flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Connected
-            </span>
-          </div>
-        </footer>
+        <IdeFooter
+          workspace={workspace}
+          activeTab={activeTab}
+          lineCount={lineCount}
+          lspStatus={lspStatus}
+          plugins={plugins.enabled}
+          status={plugins.status}
+          onRun={(plugin, command) => plugins.runPluginCommand(plugin, command)}
+        />
       </div>
 
       <ReferencesDialog

@@ -11,3 +11,4 @@ frontend/playwright-report/
 coverage/
 
 .pi/
+examples/plugins/demo/demo.zip

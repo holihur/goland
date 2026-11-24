@@ -46,9 +46,10 @@ function qs(params: Record<string, string | number | boolean | undefined>) {
   return result ? `?${result}` : "";
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
+  if (init.body && !isForm && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   if (init.method && !["GET", "HEAD", "OPTIONS"].includes(init.method)) {
     const token = currentCSRF();
     if (token) headers.set("X-CSRF-Token", token);

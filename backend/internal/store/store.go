@@ -78,13 +78,15 @@ type AuditEvent struct {
 }
 
 type Store struct {
-	client     *mongo.Client
-	db         *mongo.Database
-	Users      *mongo.Collection
-	Sessions   *mongo.Collection
-	Workspaces *mongo.Collection
-	TaskRuns   *mongo.Collection
-	Audit      *mongo.Collection
+	client           *mongo.Client
+	db               *mongo.Database
+	Users            *mongo.Collection
+	Sessions         *mongo.Collection
+	Workspaces       *mongo.Collection
+	TaskRuns         *mongo.Collection
+	Audit            *mongo.Collection
+	Plugins          *mongo.Collection
+	WorkspacePlugins *mongo.Collection
 }
 
 func Connect(ctx context.Context, uri, dbName string) (*Store, error) {
@@ -98,13 +100,15 @@ func Connect(ctx context.Context, uri, dbName string) (*Store, error) {
 	}
 	db := client.Database(dbName)
 	s := &Store{
-		client:     client,
-		db:         db,
-		Users:      db.Collection("users"),
-		Sessions:   db.Collection("sessions"),
-		Workspaces: db.Collection("workspaces"),
-		TaskRuns:   db.Collection("taskRuns"),
-		Audit:      db.Collection("auditEvents"),
+		client:           client,
+		db:               db,
+		Users:            db.Collection("users"),
+		Sessions:         db.Collection("sessions"),
+		Workspaces:       db.Collection("workspaces"),
+		TaskRuns:         db.Collection("taskRuns"),
+		Audit:            db.Collection("auditEvents"),
+		Plugins:          db.Collection("plugins"),
+		WorkspacePlugins: db.Collection("workspacePlugins"),
 	}
 	if err := s.ensureIndexes(ctx); err != nil {
 		_ = client.Disconnect(context.Background())
@@ -147,7 +151,25 @@ func (s *Store) ensureIndexes(ctx context.Context) error {
 		Keys:    bson.D{{Key: "createdAt", Value: -1}},
 		Options: options.Index().SetName("audit_created"),
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("audit index: %w", err)
+	}
+	_, err = s.Plugins.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "installedAt", Value: 1}},
+		Options: options.Index().SetName("plugin_installed"),
+	})
+	if err != nil {
+		return fmt.Errorf("plugins index: %w", err)
+	}
+	_, err = s.WorkspacePlugins.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "workspaceId", Value: 1}, {Key: "pluginId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("workspace_plugin_unique")},
+		{Keys: bson.D{{Key: "ownerId", Value: 1}, {Key: "workspaceId", Value: 1}}, Options: options.Index().SetName("workspace_plugin_owner")},
+		{Keys: bson.D{{Key: "pluginId", Value: 1}}, Options: options.Index().SetName("workspace_plugin_plugin")},
+	})
+	if err != nil {
+		return fmt.Errorf("workspace plugins index: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) Disconnect(ctx context.Context) error { return s.client.Disconnect(ctx) }

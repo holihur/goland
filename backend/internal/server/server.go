@@ -20,26 +20,38 @@ import (
 	"goland/internal/config"
 	"goland/internal/files"
 	"goland/internal/git"
+	"goland/internal/plugins"
 	"goland/internal/store"
 	"goland/internal/workspace"
 )
 
 type Server struct {
-	cfg        *config.Config
-	store      *store.Store
-	auth       *auth.Manager
-	workspaces *workspace.Manager
-	files      *files.Manager
-	git        *git.Manager
-	log        *slog.Logger
-	limiter    *loginLimiter
-	debugMu    sync.Mutex
-	debugSess  map[string]*debugSession
-	browsers   map[string]*browserSession
+	cfg           *config.Config
+	store         *store.Store
+	auth          *auth.Manager
+	workspaces    *workspace.Manager
+	files         *files.Manager
+	git           *git.Manager
+	log           *slog.Logger
+	limiter       *loginLimiter
+	debugMu       sync.Mutex
+	debugSess     map[string]*debugSession
+	browsers      map[string]*browserSession
+	plugins       *plugins.Installer
+	pluginHosts   *plugins.HostManager
+	pluginEvents  *pluginEventHub
+	pluginMu      sync.Mutex
+	pluginWorkers map[string]map[string]func()
 }
 
 func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Manager, fm *files.Manager, gm *git.Manager, log *slog.Logger) http.Handler {
-	s := &Server{cfg: cfg, store: st, auth: am, workspaces: wm, files: fm, git: gm, log: log, limiter: newLoginLimiter(), debugSess: make(map[string]*debugSession)}
+	s := &Server{
+		cfg: cfg, store: st, auth: am, workspaces: wm, files: fm, git: gm, log: log,
+		limiter: newLoginLimiter(), debugSess: make(map[string]*debugSession),
+		plugins:     plugins.NewInstaller(filepath.Join(cfg.DataDir, "plugins")),
+		pluginHosts: plugins.NewHostManager(log), pluginEvents: newPluginEventHub(),
+		pluginWorkers: make(map[string]map[string]func()),
+	}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -60,6 +72,10 @@ func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Ma
 			admin.Use(requireAdmin)
 			admin.Get("/users", s.listUsers)
 			admin.Post("/users", s.createUser)
+			admin.Get("/plugins", s.listPlugins)
+			admin.Post("/plugins", s.installPluginFromPath)
+			admin.Post("/plugins/upload", s.uploadPlugin)
+			admin.Delete("/plugins/{pluginID}", s.uninstallPlugin)
 		})
 
 		api.Route("/workspaces", func(ws chi.Router) {
@@ -88,10 +104,15 @@ func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Ma
 				one.Get("/git/log", s.gitLog)
 				one.Get("/tasks", s.listTasks)
 				one.Get("/tasks/runs", s.taskRuns)
+				one.Get("/plugins", s.listWorkspacePlugins)
+				one.Put("/plugins/{pluginID}", s.updateWorkspacePlugin)
+				one.Delete("/plugins/{pluginID}", s.removeWorkspacePlugin)
 				one.Get("/debug/config", s.debugConfig)
 				one.Post("/browser/session", s.startBrowser)
 				one.Delete("/browser/session/{browserID}", s.stopBrowser)
 				one.Post("/browser/session/{browserID}/reload", s.reloadBrowser)
+				one.Post("/plugins/{pluginID}/commands/{commandID}", s.executePluginCommand)
+				one.Post("/plugins/{pluginID}/cancel", s.cancelPluginCommand)
 				one.Get("/terminal", s.terminalInfo)
 			})
 		})
@@ -100,6 +121,9 @@ func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Ma
 		api.Get("/ws/workspaces/{workspaceID}/lsp", s.lspWS)
 		api.Get("/ws/workspaces/{workspaceID}/run", s.taskWS)
 		api.Get("/ws/workspaces/{workspaceID}/debug/{kind}", s.debugWS)
+		api.Get("/ws/workspaces/{workspaceID}/plugins", s.pluginEventWS)
+		api.Get("/ws/workspaces/{workspaceID}/plugins/{pluginID}/lsp/{serverID}", s.pluginLSPWS)
+		api.Get("/ws/workspaces/{workspaceID}/plugins/{pluginID}/debug/{kind}", s.pluginDAPWS)
 	})
 
 	r.NotFound(s.notFound)

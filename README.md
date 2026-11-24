@@ -11,6 +11,7 @@ Implemented:
 - Per-workspace unprivileged Unix UID; terminal, LSP, task and debug processes run as that UID.
 - File tree, CodeMirror tabs, editing/saving, conflict detection, search.
 - Window management: draggable sidebar/bottom-panel splitters, collapsible and maximizable panels, up to four editor groups with tabs dragged between groups, and per-user/workspace layout persistence.
+- Plugin system: admin-installed packages, per-workspace enable/config, JSON-RPC plugin hosts, declarative panels/status/settings, file/Git hooks, editor actions, and plugin-provided LSP/DAP servers routed through the backend.
 - gopls and typescript-language-server: diagnostics, completion, hover, definition, references, formatting.
 - xterm.js PTY terminal, Go/pnpm tasks with streamed output.
 - Delve DAP for Go and js-debug DAP for Node/TypeScript: breakpoints, call stack, variables.
@@ -23,8 +24,8 @@ Implemented:
 
 Verification status:
 
-- Go tests: 74.6% statement coverage, `go vet` and `gofmt` clean.
-- Frontend: ESLint, typecheck, 133 Vitest tests at 98% line coverage.
+- Go tests: 76.2% statement coverage, `go vet` and `gofmt` clean.
+- Frontend: ESLint, typecheck, 155 Vitest tests at 95.9% line coverage.
 - Playwright is configured to run the full suite in the GitHub Actions `E2E` workflow and upload reports, traces, screenshots and logs. Local Playwright runs are optional because the browser debug suite is resource-heavy.
 - Repeat the Compose cold-start check after infrastructure changes.
 
@@ -46,6 +47,34 @@ out-of-range data falls back to the default layout.
 Splitters support pointer dragging, arrow keys, and double-click to reset. Drag a tab
 onto another editor group to move it; a file never appears in two groups at once.
 Below 900px viewport width the IDE renders only the active group and disables splitting.
+
+## Plugins
+
+Plugins are local packages (`manifest.json` + executables under `bin/`) installed by an
+administrator from a server directory or a zip upload. Workspace owners enable them per
+workspace and edit the declarative settings form. No plugin JavaScript runs in the page:
+the frontend renders only manifest-declared commands, panels, status items and forms.
+
+- Plugin processes run as the workspace Unix UID with the workspace as cwd and isolated
+  `HOME`/`TMPDIR`, JSON-RPC 2.0 over stdio, per-call timeouts, output caps and process-group
+  cleanup. They are trusted code for that workspace (no capability sandbox or network
+  isolation); see [the security model](docs/security.md).
+- Hooks: `onOpen`, `onSave` (content transform or block), `preCommit` (block), `postPull`
+  (advisory). Hook commands receive JSON and never pass through a shell.
+- Languages and debuggers: a plugin can provide stdio LSP/DAP servers. The host proxies
+  frames over `/api/ws/workspaces/<id>/plugins/<plugin>/lsp/<server>` and
+  `/api/ws/workspaces/<id>/plugins/<plugin>/debug/<kind>`.
+- Example: [`examples/plugins/demo`](examples/plugins/demo) covers commands, panels,
+  status, settings, save formatting and pre-commit hooks. Build and package it with:
+
+```bash
+cd examples/plugins/demo
+go build -trimpath -o bin/demo .
+../../scripts/package-plugin.sh . demo.zip
+```
+
+See [docs/architecture.md](docs/architecture.md#plugin-system) for the protocol and
+[docs/operations.md](docs/operations.md#plugins) for install and troubleshooting.
 
 ## Toolchain
 

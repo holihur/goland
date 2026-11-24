@@ -20,6 +20,7 @@ import {
   groupState,
   hasRoomToSplit,
   isNarrowViewport,
+  isSideView,
   layoutStorageKey,
   loadLayout,
   moveTab,
@@ -406,6 +407,30 @@ describe("persistence", () => {
     expect(layout.sidebarWidth).toBe(600);
     expect(layout.bottomHeight).toBe(120);
     expect(layout.groups.g1.paths).toEqual(["a.go"]);
+  });
+});
+
+describe("side view validation", () => {
+  it("accepts fixed and plugin views", () => {
+    for (const value of ["explorer", "search", "git", "debug", "settings", "plugin:demo.plugin:demo.plugin.panel"]) {
+      expect(isSideView(value)).toBe(true);
+    }
+    for (const value of ["", "plugin:", "plugin:" + "x".repeat(200), 42, null, "unknown"]) {
+      expect(isSideView(value)).toBe(false);
+    }
+  });
+
+  it("keeps a persisted plugin view and rejects malformed ones", () => {
+    const layout = sanitizeLayout(
+      { sideView: "plugin:demo.plugin:demo.plugin.panel", rows: [["g1"]], groups: { g1: { paths: [] } } },
+      800,
+    );
+    expect(layout.sideView).toBe("plugin:demo.plugin:demo.plugin.panel");
+    const bad = sanitizeLayout(
+      { sideView: "not-a-view", rows: [["g1"]], groups: { g1: { paths: [] } } },
+      800,
+    );
+    expect(bad.sideView).toBe("explorer");
   });
 });
 

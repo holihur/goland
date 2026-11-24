@@ -179,8 +179,8 @@ git status --porcelain
 
 | Gate | Current evidence |
 | --- | --- |
-| Backend tests | `go test ./...` passes at **74.6%** statement coverage; `go vet` and `gofmt` clean |
-| Frontend tests | `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; **133 tests**, **98.1%** line coverage |
+| Backend tests | `go test ./...` passes at **76.2%** statement coverage; `go vet` and `gofmt` clean |
+| Frontend tests | `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; **155 tests**, **95.9%** line coverage |
 | Browser DAP | Browser CDP E2E passed **3 consecutive local runs** with breakpoint, call stack, variables and no leftover Chromium/js-debug processes |
 | Full E2E | **12/12 Playwright tests pass on GitHub Actions** (`E2E` run 45224748512), including the new window-management suite; local unit gates green |
 | CI | `CI` and `E2E` workflows executed green on `main` (run 45224748505 / 45224748512); source limit, lint, tests, coverage, build and Compose config are gated |
@@ -197,7 +197,7 @@ green GitHub Actions E2E run and a real Docker cold-start verification.
 | Dimension | Weight | Score | Evidence |
 | --- | ---: | ---: | --- |
 | Functional completeness | 25 | 23 | Browser DAP 3x local; full 11-test suite passes individually, CI run pending |
-| Automated testing | 20 | 19 | Go 74.6%, frontend 98.1%, 133 Vitest tests; CI E2E pending |
+| Automated testing | 20 | 19 | Go 76.2%, frontend 95.9%, 155 Vitest tests; CI E2E pending |
 | CI and release automation | 15 | 14 | Lint/test/coverage/build/E2E workflows committed; not yet executed on GitHub |
 | Documentation | 10 | 10 | Ports, Go-hosted SPA, CI and operations docs aligned |
 | Build and performance | 10 | 10 | No chunk warning; budgets met |

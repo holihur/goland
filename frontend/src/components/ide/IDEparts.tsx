@@ -1,29 +1,43 @@
 import type { ReactNode } from "react";
-import { Bug, FileCode2, Files, GitBranch, Keyboard, RotateCw, Search, Settings2, TerminalSquare } from "lucide-react";
+import { Bug, FileCode2, Files, GitBranch, Keyboard, Puzzle, RotateCw, Search, Settings2, TerminalSquare } from "lucide-react";
 import type { Workspace } from "@/lib/types";
 import type { SourceLocation } from "@/lib/lsp";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PluginSettingsSection } from "@/components/plugins/PluginSettingsSection";
+import type { SideView } from "@/lib/layout";
 
-export type SideView = "explorer" | "search" | "git" | "debug" | "settings";
+export type { SideView };
+
+export interface PluginPanelEntry {
+  view: SideView;
+  title: string;
+}
 
 export function ActivityBar({
   view,
   sidebarOpen,
   onSelect,
   onPalette,
+  pluginPanels = [],
 }: {
   view: SideView;
   sidebarOpen: boolean;
   onSelect: (view: SideView) => void;
   onPalette: () => void;
+  pluginPanels?: PluginPanelEntry[];
 }) {
   const items: Array<{ id: SideView; icon: ReactNode; label: string }> = [
     { id: "explorer", icon: <Files className="h-[18px] w-[18px]" />, label: "Explorer (⌘B)" },
     { id: "search", icon: <Search className="h-[18px] w-[18px]" />, label: "Search" },
     { id: "git", icon: <GitBranch className="h-[18px] w-[18px]" />, label: "Source control" },
     { id: "debug", icon: <Bug className="h-[18px] w-[18px]" />, label: "Run & debug (F5)" },
+    ...pluginPanels.map((panel) => ({
+      id: panel.view,
+      icon: <Puzzle className="h-[18px] w-[18px]" />,
+      label: panel.title,
+    })),
   ];
   return (
     <div className="flex w-11 shrink-0 flex-col items-center border-r bg-panel py-1">
@@ -49,6 +63,7 @@ export function ActivityBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Workspace settings"
               className="grid h-10 w-10 place-items-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
               onClick={() => onSelect("settings")}
             >
@@ -60,6 +75,7 @@ export function ActivityBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              aria-label="Command palette"
               className="grid h-10 w-10 place-items-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
               onClick={onPalette}
             >
@@ -164,6 +180,7 @@ export function WorkspaceSettings({ workspace }: { workspace: Workspace }) {
         <div className="flex items-center gap-2 rounded-md border bg-background/40 p-2 text-[10px] text-muted-foreground">
           <RotateCw className="h-3 w-3" /> Files are stored on the server filesystem.
         </div>
+        <PluginSettingsSection workspaceId={workspace.id} />
       </div>
     </div>
   );

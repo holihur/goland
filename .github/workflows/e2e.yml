@@ -38,6 +38,7 @@ jobs:
       GOLAND_DLV: ${{ github.workspace }}/bin/tools/dlv
       GOLAND_TSSERVER: ${{ github.workspace }}/frontend/node_modules/.bin/typescript-language-server
       GOLAND_JS_DEBUG: ${{ github.workspace }}/deploy/js-debug/src/dapDebugServer.js
+      GOLAND_E2E_DEMO_PLUGIN: ${{ github.workspace }}/examples/plugins/demo/demo.zip
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -67,6 +68,11 @@ jobs:
           GOBIN="$GITHUB_WORKSPACE/bin/tools" go install github.com/go-delve/delve/cmd/dlv@v1.26.3
           chmod -R o+rx bin/tools
           sudo chmod o+x /home/runner /home/runner/work "$GITHUB_WORKSPACE"
+      - name: Build demo plugin
+        run: |
+          cd examples/plugins/demo
+          go build -trimpath -o bin/demo .
+          "$GITHUB_WORKSPACE/scripts/package-plugin.sh" . demo.zip
       - name: Install Playwright Chromium
         run: |
           sudo mkdir -p /opt/playwright
@@ -93,6 +99,7 @@ jobs:
             "GOLAND_TSSERVER=$GOLAND_TSSERVER" \
             "GOLAND_JS_DEBUG=$GOLAND_JS_DEBUG" \
             "GOLAND_E2E_SERVER_LOG=$GOLAND_E2E_SERVER_LOG" \
+            "GOLAND_E2E_DEMO_PLUGIN=$GOLAND_E2E_DEMO_PLUGIN" \
             pnpm test:e2e
       - name: Show backend log tail
         if: always()

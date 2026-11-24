@@ -22,8 +22,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn, fileLanguage } from "@/lib/utils";
 import type { SourceLocation } from "@/lib/lsp";
+import { pluginDapSocket } from "@/lib/plugin-api";
 
-type DebugKind = "go" | "node" | "browser";
+export interface PluginDebuggerContribution {
+  pluginId: string;
+  pluginName: string;
+  kind: string;
+  label: string;
+}
+
+type DebugKind = string;
 type Status = "idle" | "starting" | "running" | "stopped" | "terminated" | "error";
 
 interface VariableGroup {
@@ -37,12 +45,14 @@ export function DebugPanel({
   breakpoints,
   onBreakpointsChange,
   onOpenLocation,
+  pluginDebuggers = [],
 }: {
   workspace: Workspace;
   activePath: string;
   breakpoints: Record<string, number[]>;
   onBreakpointsChange: (next: Record<string, number[]>) => void;
   onOpenLocation: (location: SourceLocation) => void;
+  pluginDebuggers?: PluginDebuggerContribution[];
 }) {
   const [kind, setKind] = useState<DebugKind>("go");
   const [program, setProgram] = useState(".");
@@ -205,6 +215,18 @@ export function DebugPanel({
   const launchConfig = async (): Promise<Record<string, unknown>> => {
     const root = workspace.rootPath;
     const cfg = debugConfig ?? (await api.debugConfig(workspace.id));
+    const pluginDebugger = pluginDebuggers.find((item) => item.kind === kind);
+    if (pluginDebugger) {
+      return {
+        type: kind,
+        request: "launch",
+        name: pluginDebugger.label,
+        program: program || ".",
+        cwd: root,
+        args: [],
+        console: "internalConsole",
+      };
+    }
     if (kind === "go") {
       return {
         type: "go",
@@ -251,10 +273,12 @@ export function DebugPanel({
     setFrames([]);
     setGroups([]);
     setStatus("starting");
+    const pluginDebugger = pluginDebuggers.find((item) => item.kind === kind);
+    const socketUrl = pluginDebugger ? pluginDapSocket(workspace.id, pluginDebugger.pluginId, kind) : undefined;
     const client = new DAPClient(workspace.id, kind, (message) => {
       setError(message);
       appendOutput(`\n[error] ${message}\n`);
-    });
+    }, "", socketUrl);
     parentRef.current?.dispose();
     parentRef.current = client;
     clientRef.current = client;
@@ -263,7 +287,7 @@ export function DebugPanel({
       const child = new DAPClient(workspace.id, kind, (message) => {
         setError(message);
         appendOutput(`\n[error] ${message}\n`);
-      }, client.adapterId);
+      }, client.adapterId, socketUrl);
       clientRef.current = child;
       child.onEvent(handleEvent(child));
       appendOutput("[child debug target attached]\n");
@@ -407,18 +431,19 @@ export function DebugPanel({
 
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="space-y-2 border-b p-2.5">
-          <div className="grid grid-cols-3 gap-1">
-            {(["go", "node", "browser"] as const).map((item) => (
+          <div className="flex flex-wrap gap-1">
+            {["go", "node", "browser", ...pluginDebuggers.map((item) => item.kind)].map((item) => (
               <button
                 key={item}
                 disabled={active}
+                title={pluginDebuggers.find((entry) => entry.kind === item)?.label ?? item}
                 className={cn(
-                  "rounded border px-1 py-1 text-[10px] capitalize",
+                  "min-w-[54px] flex-1 rounded border px-1 py-1 text-[10px]",
                   kind === item ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent",
                 )}
                 onClick={() => setKind(item)}
               >
-                {item}
+                {pluginDebuggers.find((entry) => entry.kind === item)?.label ?? item}
               </button>
             ))}
           </div>
@@ -443,7 +468,11 @@ export function DebugPanel({
                 className="h-7 font-code text-[10px]"
               />
               <p className="text-[9px] leading-4 text-muted-foreground">
-                {kind === "go" ? "Go package or file, relative to the workspace." : "Entry point, for example web/app.ts."}
+                {kind === "go"
+                  ? "Go package or file, relative to the workspace."
+                  : pluginDebuggers.some((item) => item.kind === kind)
+                    ? "Entry point passed to the plugin debugger."
+                    : "Entry point, for example web/app.ts."}
               </p>
             </div>
           )}
@@ -662,7 +691,7 @@ function VariableRow({
   );
 }
 
-export const debugKindLabel: Record<DebugKind, string> = {
+export const debugKindLabel: Record<string, string> = {
   go: "Go",
   node: "Node / TypeScript",
   browser: "Browser",

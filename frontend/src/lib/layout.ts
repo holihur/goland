@@ -17,7 +17,7 @@ export const DEFAULT_BOTTOM_HEIGHT = 230;
 export const MAX_GROUPS = 4;
 export const NARROW_BREAKPOINT = 900;
 
-export type SideView = "explorer" | "search" | "git" | "debug" | "settings";
+export type SideView = "explorer" | "search" | "git" | "debug" | "settings" | `plugin:${string}`;
 export type BottomView = "terminal" | "output";
 export type SplitDirection = "right" | "down";
 
@@ -44,6 +44,12 @@ export interface LayoutState {
 }
 
 const SIDE_VIEWS: SideView[] = ["explorer", "search", "git", "debug", "settings"];
+
+export function isSideView(value: unknown): value is SideView {
+  if (typeof value !== "string") return false;
+  if (SIDE_VIEWS.includes(value as SideView)) return true;
+  return value.startsWith("plugin:") && value.length > 7 && value.length <= 200;
+}
 
 export function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
@@ -293,7 +299,7 @@ export function sanitizeLayout(raw: unknown, viewportHeight: number): LayoutStat
     typeof raw.bottomHeight === "number" ? raw.bottomHeight : fallback.bottomHeight,
     viewportHeight,
   );
-  const sideView = SIDE_VIEWS.includes(raw.sideView as SideView) ? (raw.sideView as SideView) : fallback.sideView;
+  const sideView = isSideView(raw.sideView) ? raw.sideView : fallback.sideView;
   const bottomView: BottomView = raw.bottomView === "output" ? "output" : "terminal";
 
   const rawGroups = isRecord(raw.groups) ? raw.groups : {};

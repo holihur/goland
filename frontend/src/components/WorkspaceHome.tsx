@@ -6,6 +6,7 @@ import {
   HardDrive,
   LogOut,
   Plus,
+  Puzzle,
   Search,
   Settings2,
   Trash2,
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
 import { AdminUsersDialog } from "./AdminUsersDialog";
+import { AdminPluginsDialog } from "./plugins/AdminPluginsDialog";
 import { relativeTime } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
 import { useI18n } from "@/lib/i18n";
@@ -48,6 +50,7 @@ export function WorkspaceHome({
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [usersOpen, setUsersOpen] = useState(false);
+  const [pluginsOpen, setPluginsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const filtered = workspaces.filter((workspace) =>
     `${workspace.name} ${workspace.repoUrl ?? ""} ${workspace.rootPath}`.toLowerCase().includes(query.toLowerCase()),
@@ -94,9 +97,14 @@ export function WorkspaceHome({
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {user.role === "admin" && (
-                <DropdownMenuItem onSelect={() => setUsersOpen(true)}>
-                  <Users className="h-4 w-4" /> {t("home.manageUsers")}
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onSelect={() => setUsersOpen(true)}>
+                    <Users className="h-4 w-4" /> {t("home.manageUsers")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setPluginsOpen(true)}>
+                    <Puzzle className="h-4 w-4" /> Plugins
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
                 <Settings2 className="h-4 w-4" /> {t("home.preferences")}
@@ -234,6 +242,7 @@ export function WorkspaceHome({
         }}
       />
       <AdminUsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
+      <AdminPluginsDialog open={pluginsOpen} onOpenChange={setPluginsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );

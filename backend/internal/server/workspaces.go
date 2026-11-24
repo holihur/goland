@@ -81,9 +81,14 @@ func (s *Server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	s.pluginHosts.StopWorkspace(ws.ID.Hex())
+	s.stopWorkspacePluginWorkers(ws.ID.Hex())
 	if err := s.workspaces.Delete(r.Context(), ws.OwnerID, ws.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal", "could not delete workspace")
 		return
+	}
+	if err := s.store.DeleteWorkspacePluginsForWorkspace(r.Context(), ws.OwnerID, ws.ID); err != nil {
+		s.log.Warn("delete workspace plugins failed", "workspace", ws.ID.Hex(), "err", err)
 	}
 	s.audit(r, "workspace.delete", ws.ID.Hex(), ws.Name)
 	w.WriteHeader(http.StatusNoContent)

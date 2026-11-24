@@ -244,3 +244,23 @@ describe("languageForPath", () => {
     expect(languageForPath("README.md")).toBeNull();
   });
 });
+
+describe("plugin language sockets", () => {
+  it("uses a plugin-provided websocket URL", async () => {
+    installWebSocket();
+    const client = new LSPClient(
+      "ws1",
+      root,
+      "demo",
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      "ws://127.0.0.1:8788/api/ws/workspaces/ws1/plugins/demo/lsp/demo-lang",
+    );
+    await tick();
+    expect(MockWebSocket.instances[0].url).toBe(
+      "ws://127.0.0.1:8788/api/ws/workspaces/ws1/plugins/demo/lsp/demo-lang",
+    );
+    expect(client.language).toBe("demo");
+  });
+});
