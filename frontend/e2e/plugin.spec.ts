@@ -63,6 +63,7 @@ test.afterAll(async ({ request }) => {
 
 test("plugin install, enable, UI contributions, hooks and isolation", async ({ browser, request }) => {
   test.setTimeout(480_000);
+  await apiLogin(request);
 
   // Admin installs the packaged example through the UI upload.
   const admin = await browser.newPage({ viewport: { width: 1280, height: 800 } });
