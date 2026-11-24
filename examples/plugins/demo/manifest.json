@@ -11,9 +11,9 @@
       { "id": "demo.scan", "title": "Scan workspace" },
       { "id": "demo.format", "title": "Format file" },
       { "id": "demo.slow", "title": "Emit stream" },
-      { "id": "demo.onOpen", "title": "Internal open hook" },
-      { "id": "demo.onSave", "title": "Internal save hook" },
-      { "id": "demo.preCommit", "title": "Internal pre-commit hook" }
+      { "id": "demo.onopen", "title": "Internal open hook" },
+      { "id": "demo.onsave", "title": "Internal save hook" },
+      { "id": "demo.precommit", "title": "Internal pre-commit hook" }
     ],
     "panels": [
       {
@@ -53,9 +53,9 @@
       }
     ],
     "hooks": {
-      "onOpen": { "command": "demo.onOpen" },
-      "onSave": { "command": "demo.onSave", "failure": "open" },
-      "preCommit": { "command": "demo.preCommit", "failure": "closed" }
+      "onOpen": { "command": "demo.onopen" },
+      "onSave": { "command": "demo.onsave", "failure": "open" },
+      "preCommit": { "command": "demo.precommit", "failure": "closed" }
     },
     "editorActions": [
       { "id": "demo.format.action", "title": "Format with Demo", "command": "demo.format" }
