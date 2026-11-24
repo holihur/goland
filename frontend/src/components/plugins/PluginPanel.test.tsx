@@ -62,26 +62,60 @@ describe("PluginPanel", () => {
     fireEvent.change(screen.getByLabelText("Query"), { target: { value: "needle" } });
     fireEvent.click(screen.getByRole("button", { name: /Run/ }));
     await waitFor(() =>
-      expect(execute).toHaveBeenCalledWith("demo.plugin", "demo.plugin.run", {
-        inputs: { query: "needle", mode: "fast", fixed: true },
-      }),
+      expect(execute).toHaveBeenCalledWith(
+        "demo.plugin",
+        "demo.plugin.run",
+        expect.objectContaining({ inputs: { query: "needle", mode: "fast", fixed: true } }),
+      ),
     );
     await waitFor(() => expect(screen.getByLabelText("Demo panel output")).toHaveTextContent("done"));
   });
 
-  it("shows panel state output and a cancel button", async () => {
-    const { cancel } = renderPanel({ state: { output: "server output", state: {} } });
+  it("shows panel state output", () => {
+    renderPanel({ state: { output: "server output", state: {} } });
     expect(screen.getByLabelText("Demo panel output")).toHaveTextContent("server output");
-    fireEvent.click(screen.getByRole("button", { name: /Run/ }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Cancel/ })).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /Cancel/ }));
-    expect(cancel).toHaveBeenCalledWith("demo.plugin", "req-1");
   });
 
-  it("prefers streamed command output for the active request", async () => {
-    renderPanel({ state: { output: "panel output", state: {} }, outputs: { "req-1": "streamed" } });
+  it("streams output and exposes cancel while a command is running", async () => {
+    let resolveCommand: (value: { requestId: string; output: string }) => void = () => undefined;
+    const execute = vi.fn().mockImplementation(
+      () =>
+        new Promise<{ requestId: string; output: string }>((resolve) => {
+          resolveCommand = resolve;
+        }),
+    );
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <PluginPanel
+        plugin={plugin}
+        panel={panel}
+        runtime={{ output: "", state: {} }}
+        outputs={{}}
+        execute={execute as never}
+        cancel={cancel}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /Run/ }));
-    await waitFor(() => expect(screen.getByLabelText("Demo panel output")).toHaveTextContent("streamed"));
+    await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+    const requestId = (execute.mock.calls[0][2] as { requestId: string }).requestId;
+    expect(requestId).toBeTruthy();
+    rerender(
+      <PluginPanel
+        plugin={plugin}
+        panel={panel}
+        runtime={{ output: "", state: {} }}
+        outputs={{ [requestId]: "chunk 1\nchunk 2" }}
+        execute={execute as never}
+        cancel={cancel}
+      />,
+    );
+    expect(screen.getByLabelText("Demo panel output")).toHaveTextContent("chunk 1");
+    const cancelButton = await screen.findByRole("button", { name: /Cancel/ });
+    fireEvent.click(cancelButton);
+    expect(cancel).toHaveBeenCalledWith("demo.plugin", requestId);
+    resolveCommand({ requestId, output: "cancelled" });
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Cancel/ })).toBeNull());
+    expect(screen.getByLabelText("Demo panel output")).toHaveTextContent("chunk 1");
   });
 
   it("shows an error when a command fails", async () => {

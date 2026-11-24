@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -43,32 +44,33 @@ type hookParams struct {
 }
 
 type plugin struct {
+	mu           sync.Mutex
+	encoder      *json.Encoder
 	greeting     string
 	formatOnSave bool
 	commands     int
 	lastOutput   string
+	cancelled    map[string]bool
 }
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 64<<10), 4<<20)
 	encoder := json.NewEncoder(os.Stdout)
-	p := &plugin{greeting: "Hello", formatOnSave: true}
+	p := &plugin{encoder: encoder, greeting: "Hello", formatOnSave: true, cancelled: map[string]bool{}}
 	for scanner.Scan() {
 		var req request
 		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
 			continue
 		}
-		reply := func(result any) {
-			_ = encoder.Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": result})
-		}
+		reply := func(result any) { p.reply(req.ID, result) }
 		switch req.Method {
 		case "initialize":
 			var params initializeParams
 			_ = json.Unmarshal(req.Params, &params)
 			p.applyConfig(params.Config)
 			reply(map[string]any{"name": "Demo Toolkit", "version": "1.0.0"})
-			p.notify(encoder, "ui/status", map[string]any{"id": "demo.status", "text": "Demo ready", "tooltip": "Demo plugin"})
+			p.notify("ui/status", map[string]any{"id": "demo.status", "text": "Demo ready", "tooltip": "Demo plugin"})
 		case "health":
 			reply(map[string]any{"status": "ok"})
 		case "shutdown":
@@ -76,8 +78,20 @@ func main() {
 		case "command/execute":
 			var params commandParams
 			_ = json.Unmarshal(req.Params, &params)
-			p.command(encoder, params)
+			if params.CommandID == "demo.slow" {
+				go p.slow(req.ID, params)
+				continue
+			}
+			p.command(params)
 			reply(map[string]any{"output": p.lastOutput})
+		case "command/cancel":
+			var params struct {
+				RequestID string `json:"requestId"`
+			}
+			_ = json.Unmarshal(req.Params, &params)
+			p.mu.Lock()
+			p.cancelled[params.RequestID] = true
+			p.mu.Unlock()
 		case "hook/onOpen":
 			reply(map[string]any{"allow": true, "notes": []string{"demo: file checked"}})
 		case "hook/onSave":
@@ -110,7 +124,7 @@ func (p *plugin) applyConfig(config map[string]any) {
 	}
 }
 
-func (p *plugin) command(encoder *json.Encoder, params commandParams) {
+func (p *plugin) command(params commandParams) {
 	p.commands++
 	switch params.CommandID {
 	case "demo.hello":
@@ -120,8 +134,8 @@ func (p *plugin) command(encoder *json.Encoder, params commandParams) {
 			message += ", " + name
 		}
 		p.lastOutput = message + "!"
-		p.notify(encoder, "ui/status", map[string]any{"id": "demo.status", "text": fmt.Sprintf("Demo: greeted %d", p.commands)})
-		p.notify(encoder, "ui/notify", map[string]any{"level": "info", "message": p.lastOutput})
+		p.notify("ui/status", map[string]any{"id": "demo.status", "text": fmt.Sprintf("Demo: greeted %d", p.commands)})
+		p.notify("ui/notify", map[string]any{"level": "info", "message": p.lastOutput})
 	case "demo.scan":
 		query := stringInput(params.Inputs, "query")
 		if query == "" {
@@ -133,24 +147,48 @@ func (p *plugin) command(encoder *json.Encoder, params commandParams) {
 			return
 		}
 		p.lastOutput = fmt.Sprintf("%d file(s) matching %s", len(files), query)
-		p.notify(encoder, "ui/panel", map[string]any{
+		p.notify("ui/panel", map[string]any{
 			"panelId": "demo.panel", "output": strings.Join(files, "\n"),
 			"state": map[string]any{"query": query, "count": len(files)},
 		})
-		p.notify(encoder, "ui/status", map[string]any{"id": "demo.status", "text": fmt.Sprintf("Demo: %d files", len(files))})
+		p.notify("ui/status", map[string]any{"id": "demo.status", "text": fmt.Sprintf("Demo: %d files", len(files))})
 	case "demo.format":
 		p.lastOutput = p.formatPath(params.Path)
-		p.notify(encoder, "ui/notify", map[string]any{"level": "info", "message": p.lastOutput})
-	case "demo.slow":
-		for i := 1; i <= 5; i++ {
-			p.notify(encoder, "command/output", map[string]any{"requestId": params.RequestID, "chunk": fmt.Sprintf("chunk %d\n", i)})
-			time.Sleep(120 * time.Millisecond)
-		}
-		p.lastOutput = "stream complete"
-		p.notify(encoder, "command/output", map[string]any{"requestId": params.RequestID, "chunk": p.lastOutput + "\n"})
+		p.notify("ui/notify", map[string]any{"level": "info", "message": p.lastOutput})
 	default:
 		p.lastOutput = "unknown command " + params.CommandID
 	}
+}
+
+func (p *plugin) slow(id *int64, params commandParams) {
+	for i := 1; i <= 12; i++ {
+		p.mu.Lock()
+		cancelled := p.cancelled[params.RequestID]
+		p.mu.Unlock()
+		if cancelled {
+			p.mu.Lock()
+			delete(p.cancelled, params.RequestID)
+			p.mu.Unlock()
+			p.notify("command/output", map[string]any{"requestId": params.RequestID, "chunk": "[cancelled]\n"})
+			p.reply(id, map[string]any{"output": "cancelled"})
+			return
+		}
+		p.notify("command/output", map[string]any{"requestId": params.RequestID, "chunk": fmt.Sprintf("chunk %d\n", i)})
+		time.Sleep(150 * time.Millisecond)
+	}
+	p.reply(id, map[string]any{"output": "stream complete"})
+}
+
+func (p *plugin) reply(id *int64, result any) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_ = p.encoder.Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
+}
+
+func (p *plugin) notify(method string, params any) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_ = p.encoder.Encode(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
 }
 
 func (p *plugin) formatPath(path string) string {
@@ -167,10 +205,6 @@ func (p *plugin) formatPath(path string) string {
 		return "format failed: " + err.Error()
 	}
 	return "formatted " + path
-}
-
-func (p *plugin) notify(encoder *json.Encoder, method string, params any) {
-	_ = encoder.Encode(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
 }
 
 func stringInput(inputs map[string]any, key string) string {

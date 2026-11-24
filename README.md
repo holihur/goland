@@ -24,8 +24,8 @@ Implemented:
 
 Verification status:
 
-- Go tests: 76.2% statement coverage, `go vet` and `gofmt` clean.
-- Frontend: ESLint, typecheck, 155 Vitest tests at 95.9% line coverage.
+- Go tests: 76.3% statement coverage, `go vet` and `gofmt` clean.
+- Frontend: ESLint, typecheck, 156 Vitest tests at 94.0% line coverage.
 - Playwright is configured to run the full suite in the GitHub Actions `E2E` workflow and upload reports, traces, screenshots and logs. Local Playwright runs are optional because the browser debug suite is resource-heavy.
 - Repeat the Compose cold-start check after infrastructure changes.
 

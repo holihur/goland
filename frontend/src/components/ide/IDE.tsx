@@ -765,6 +765,7 @@ export function IDE({
           lspStatus={lspStatus}
           plugins={plugins.enabled}
           status={plugins.status}
+          pluginErrors={plugins.pluginErrors}
           onRun={(plugin, command) => plugins.runPluginCommand(plugin, command)}
         />
       </div>

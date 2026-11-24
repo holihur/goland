@@ -14,6 +14,7 @@ export function IdeFooter({
   lspStatus,
   plugins,
   status,
+  pluginErrors,
   onRun,
 }: {
   workspace: Workspace;
@@ -22,6 +23,7 @@ export function IdeFooter({
   lspStatus: Record<string, string>;
   plugins: WorkspacePlugin[];
   status: Record<string, PluginStatusState>;
+  pluginErrors?: Record<string, string>;
   onRun: (plugin: WorkspacePlugin, command: string) => void;
 }) {
   return (
@@ -52,7 +54,7 @@ export function IdeFooter({
             {language === "go" ? "Go" : language === "typescript" ? "TS" : language.split(":").pop()}
           </span>
         ))}
-        <PluginStatusBar plugins={plugins} status={status} onRun={onRun} />
+        <PluginStatusBar plugins={plugins} status={status} errors={pluginErrors} onRun={onRun} />
       </div>
       <div className="flex items-center gap-3">
         <span className="hidden md:inline">{workspace.rootPath}</span>

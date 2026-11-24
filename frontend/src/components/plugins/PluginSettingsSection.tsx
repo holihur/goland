@@ -88,8 +88,13 @@ export function PluginSettingsSection({ workspaceId }: { workspaceId: string }) 
               <div className="min-w-0">
                 <div className="truncate text-xs font-medium">{plugin.name}</div>
                 <div className="truncate font-code text-[10px] text-muted-foreground">
-                  {plugin.id} · v{plugin.version}
+                  {plugin.id} · v{plugin.version} · {plugin.health ?? "stopped"}
                 </div>
+                {plugin.health === "error" && (
+                  <div className="mt-1 break-words text-[10px] leading-4 text-red-300" role="alert">
+                    {plugin.lastError || "Plugin crashed"}
+                  </div>
+                )}
               </div>
               <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
                 <input

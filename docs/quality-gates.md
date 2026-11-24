@@ -179,8 +179,8 @@ git status --porcelain
 
 | Gate | Current evidence |
 | --- | --- |
-| Backend tests | `go test ./...` passes at **76.2%** statement coverage; `go vet` and `gofmt` clean |
-| Frontend tests | `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; **155 tests**, **95.9%** line coverage |
+| Backend tests | `go test ./...` passes at **76.3%** statement coverage; `go vet` and `gofmt` clean |
+| Frontend tests | `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; **156 tests**, **94.0%** line coverage |
 | Browser DAP | Browser CDP E2E passed **3 consecutive local runs** with breakpoint, call stack, variables and no leftover Chromium/js-debug processes |
 | Full E2E | **13/13 Playwright tests pass on GitHub Actions** (`E2E` run 45311424767), including plugin install/enable/hooks and window management |
 | CI | `CI` and `E2E` workflows executed green on `main` (run 45311424729 / 45311424767); source limit, lint, tests, coverage, build and Compose config are gated |
@@ -197,7 +197,7 @@ cold-start verification and a tagged release with release notes.
 | Dimension | Weight | Score | Evidence |
 | --- | ---: | ---: | --- |
 | Functional completeness | 25 | 25 | Full 13-test Playwright suite green on GitHub Actions, including plugin and browser DAP flows |
-| Automated testing | 20 | 20 | Go 76.2%, frontend 95.9%, 155 Vitest tests; CI and E2E green |
+| Automated testing | 20 | 20 | Go 76.3%, frontend 94.0%, 156 Vitest tests; CI and E2E green |
 | CI and release automation | 15 | 15 | CI and E2E executed green on main; workflows gate lint, tests, coverage, build and Compose config |
 | Documentation | 10 | 10 | Ports, Go-hosted SPA, CI and operations docs aligned |
 | Build and performance | 10 | 10 | No chunk warning; budgets met |

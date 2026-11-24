@@ -95,6 +95,14 @@ test("plugin install, enable, UI contributions, hooks and isolation", async ({ b
   await panel.getByRole("button", { name: "Scan" }).click();
   await expect(panel.getByLabel("Demo toolkit output")).toContainText("notes.txt", { timeout: 20_000 });
 
+  // Long commands stream while running and can be cancelled from the panel.
+  await panel.getByRole("button", { name: "Stream output" }).click();
+  await expect(panel.getByLabel("Demo toolkit output")).toContainText("chunk 1", { timeout: 10_000 });
+  await expect(panel.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await panel.getByRole("button", { name: "Cancel" }).click();
+  await expect(panel.getByLabel("Demo toolkit output")).toContainText("cancelled", { timeout: 10_000 });
+  await expect(panel.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+
   // Command palette includes plugin commands; execution shows output.
   await page.keyboard.press("Control+k");
   await page.getByText("Demo Toolkit: Say hello", { exact: true }).click();

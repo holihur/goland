@@ -79,15 +79,37 @@ func readFileForTest(t *testing.T, path string) []byte {
 	return data
 }
 
-func installTransportPlugin(t *testing.T, f *extraFixture) {
+func installTransportPlugin(t *testing.T, f *extraFixture) string {
 	t.Helper()
-	if resp := f.admin.do(http.MethodPost, "/api/admin/plugins", map[string]any{"path": writeTransportPluginPackage(t)}, true); resp.StatusCode != http.StatusCreated {
+	dir := writeTransportPluginPackage(t)
+	if resp := f.admin.do(http.MethodPost, "/api/admin/plugins", map[string]any{"path": dir}, true); resp.StatusCode != http.StatusCreated {
 		t.Fatalf("install transport plugin: %d %s", resp.StatusCode, readBody(resp))
 	}
 	if resp := f.member.do(http.MethodPut, f.path("/plugins/test.plugin"), map[string]any{"enabled": true}, true); resp.StatusCode != http.StatusOK {
 		t.Fatalf("enable transport plugin: %d %s", resp.StatusCode, readBody(resp))
 	} else {
 		readBody(resp)
+	}
+	return dir
+}
+
+func waitNoProcess(t *testing.T, binary string) {
+	t.Helper()
+	if _, err := exec.LookPath("pgrep"); err != nil {
+		t.Log("pgrep unavailable; skipping process cleanup assertion")
+		return
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		cmd := exec.Command("pgrep", "-f", binary)
+		output, err := cmd.Output()
+		if err != nil && len(output) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("worker process still running for %s: %s", binary, output)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
@@ -132,7 +154,7 @@ func sendJSON(t *testing.T, conn *websocket.Conn, value any) {
 
 func TestPluginLSPWebSocketRouting(t *testing.T) {
 	f := newExtraFixture(t)
-	installTransportPlugin(t, f)
+	dir := installTransportPlugin(t, f)
 	conn := f.dialWS(t, "/api/ws/workspaces/"+f.wsID+"/plugins/test.plugin/lsp/test.plugin.demo")
 	sendJSON(t, conn, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}})
 	response := readJSONMessage(t, conn)
@@ -148,6 +170,7 @@ func TestPluginLSPWebSocketRouting(t *testing.T) {
 		t.Fatalf("unexpected notification: %+v", notification)
 	}
 	_ = conn.Close()
+	waitNoProcess(t, filepath.Join(dir, "bin", "lsp"))
 
 	// Another tenant cannot open the same plugin worker.
 	if resp := f.admin.do(http.MethodPost, "/api/admin/users", map[string]any{
@@ -169,7 +192,7 @@ func TestPluginLSPWebSocketRouting(t *testing.T) {
 
 func TestPluginDAPWebSocketRouting(t *testing.T) {
 	f := newExtraFixture(t)
-	installTransportPlugin(t, f)
+	dir := installTransportPlugin(t, f)
 	conn := f.dialWS(t, "/api/ws/workspaces/"+f.wsID+"/plugins/test.plugin/debug/test.plugin.debug")
 	sendJSON(t, conn, map[string]any{"seq": 1, "type": "request", "command": "initialize", "arguments": map[string]any{}})
 	initialize := readJSONMessage(t, conn)
@@ -206,13 +229,47 @@ func TestPluginDAPWebSocketRouting(t *testing.T) {
 	if frame["name"] != "main.add" {
 		t.Fatalf("unexpected frame: %+v", frame)
 	}
-	sendJSON(t, conn, map[string]any{"seq": 5, "type": "request", "command": "continue", "arguments": map[string]any{"threadId": 1}})
+	sendJSON(t, conn, map[string]any{"seq": 5, "type": "request", "command": "scopes", "arguments": map[string]any{"frameId": 7}})
+	scopes := readJSONMessage(t, conn)
+	scopeBody, _ := scopes["body"].(map[string]any)
+	scopesList, _ := scopeBody["scopes"].([]any)
+	if len(scopesList) == 0 {
+		t.Fatalf("missing scopes: %+v", scopes)
+	}
+	sendJSON(t, conn, map[string]any{"seq": 6, "type": "request", "command": "variables", "arguments": map[string]any{"variablesReference": 42}})
+	variables := readJSONMessage(t, conn)
+	variableBody, _ := variables["body"].(map[string]any)
+	variableList, _ := variableBody["variables"].([]any)
+	if len(variableList) == 0 {
+		t.Fatalf("missing variables: %+v", variables)
+	}
+	firstVariable, _ := variableList[0].(map[string]any)
+	if firstVariable["name"] != "a" || firstVariable["value"] != "2" {
+		t.Fatalf("unexpected variable: %+v", firstVariable)
+	}
+	sendJSON(t, conn, map[string]any{"seq": 7, "type": "request", "command": "continue", "arguments": map[string]any{"threadId": 1}})
+	_ = conn.Close()
+	waitNoProcess(t, filepath.Join(dir, "bin", "dap"))
+}
+
+func TestPluginDisableCleansUpWorker(t *testing.T) {
+	f := newExtraFixture(t)
+	dir := installTransportPlugin(t, f)
+	conn := f.dialWS(t, "/api/ws/workspaces/"+f.wsID+"/plugins/test.plugin/lsp/test.plugin.demo")
+	sendJSON(t, conn, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}})
+	_ = readJSONMessage(t, conn)
+	if resp := f.member.do(http.MethodPut, f.path("/plugins/test.plugin"), map[string]any{"enabled": false}, true); resp.StatusCode != http.StatusOK {
+		t.Fatalf("disable: %d %s", resp.StatusCode, readBody(resp))
+	} else {
+		readBody(resp)
+	}
+	waitNoProcess(t, filepath.Join(dir, "bin", "lsp"))
 	_ = conn.Close()
 }
 
 func TestPluginLSPRequiresEnabledPlugin(t *testing.T) {
 	f := newExtraFixture(t)
-	installTransportPlugin(t, f)
+	_ = installTransportPlugin(t, f)
 	disable := map[string]any{"enabled": false}
 	if resp := f.member.do(http.MethodPut, f.path("/plugins/test.plugin"), disable, true); resp.StatusCode != http.StatusOK {
 		t.Fatalf("disable: %d", resp.StatusCode)

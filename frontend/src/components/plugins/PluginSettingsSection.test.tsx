@@ -88,6 +88,14 @@ describe("PluginSettingsSection", () => {
     );
   });
 
+  it("renders persistent host health errors", async () => {
+    listWorkspace.mockResolvedValueOnce({
+      plugins: [{ ...plugin, enabled: true, health: "error", lastError: "plugin crashed: exit status 2" }],
+    });
+    render(<PluginSettingsSection workspaceId="ws1" />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("plugin crashed: exit status 2");
+  });
+
   it("renders an empty state and surfaces errors", async () => {
     listWorkspace.mockResolvedValueOnce({ plugins: [] });
     const { unmount } = render(<PluginSettingsSection workspaceId="ws1" />);

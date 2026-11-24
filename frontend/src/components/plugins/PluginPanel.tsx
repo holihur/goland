@@ -6,6 +6,11 @@ import type { PluginField, PluginPanel as PluginPanelContribution, WorkspacePlug
 import type { PluginPanelState } from "@/lib/usePlugins";
 import { PluginFieldInput } from "./PluginFieldInput";
 
+function newRequestId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function defaultsFor(fields: PluginField[]): Record<string, unknown> {
   const values: Record<string, unknown> = {};
   for (const field of fields) if (field.default !== undefined) values[field.key] = field.default;
@@ -27,7 +32,7 @@ export function PluginPanel({
   execute: (
     pluginId: string,
     commandId: string,
-    input?: { inputs?: Record<string, unknown>; path?: string },
+    input?: { inputs?: Record<string, unknown>; path?: string; requestId?: string },
   ) => Promise<{ requestId: string; output: string }>;
   cancel: (pluginId: string, requestId: string) => Promise<void>;
 }) {
@@ -35,21 +40,31 @@ export function PluginPanel({
   const [values, setValues] = useState<Record<string, unknown>>(initial);
   const [requestId, setRequestId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [resultOutput, setResultOutput] = useState("");
   const output = requestId
     ? (outputs[requestId] ?? resultOutput ?? runtime?.output ?? "")
     : (runtime?.output ?? "");
 
   const run = async (commandId: string, extra: Record<string, unknown> = {}) => {
+    const id = newRequestId();
+    // Expose the request id before awaiting so streamed chunks and the cancel
+    // button are available while the command is still running.
+    setRequestId(id);
+    setResultOutput("");
     setBusy(true);
+    setCancelling(false);
     try {
-      const result = await execute(plugin.id, commandId, { inputs: { ...values, ...extra } });
+      const result = await execute(plugin.id, commandId, {
+        requestId: id,
+        inputs: { ...values, ...extra },
+      });
       setResultOutput(result.output);
-      setRequestId(result.requestId);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Plugin command failed");
     } finally {
       setBusy(false);
+      setCancelling(false);
     }
   };
 
@@ -81,13 +96,17 @@ export function PluginPanel({
               <Play className="h-3 w-3" /> {action.label}
             </button>
           ))}
-          {requestId && (
+          {busy && requestId && (
             <button
               type="button"
-              className="flex h-7 items-center gap-1.5 rounded border px-2 text-[10px] text-red-300 hover:bg-red-500/10"
-              onClick={() => void cancel(plugin.id, requestId)}
+              disabled={cancelling}
+              className="flex h-7 items-center gap-1.5 rounded border px-2 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+              onClick={() => {
+                setCancelling(true);
+                void cancel(plugin.id, requestId);
+              }}
             >
-              <Square className="h-3 w-3" /> Cancel
+              <Square className="h-3 w-3" /> {cancelling ? "Cancelling…" : "Cancel"}
             </button>
           )}
         </div>

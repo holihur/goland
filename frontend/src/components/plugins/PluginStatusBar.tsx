@@ -5,14 +5,26 @@ import type { PluginStatusState } from "@/lib/usePlugins";
 export function PluginStatusBar({
   plugins,
   status,
+  errors = {},
   onRun,
 }: {
   plugins: WorkspacePlugin[];
   status: Record<string, PluginStatusState>;
+  errors?: Record<string, string>;
   onRun: (plugin: WorkspacePlugin, command: string) => void;
 }) {
   return (
     <>
+      {Object.entries(errors).map(([pluginId, message]) => (
+        <span
+          key={`error:${pluginId}`}
+          title={message}
+          role="status"
+          className="flex items-center gap-1 text-red-300"
+        >
+          <Puzzle className="h-3 w-3" /> {pluginId}: error
+        </span>
+      ))}
       {plugins.flatMap((plugin) =>
         (plugin.manifest?.contributes.status ?? []).map((item) => {
           const state = status[`${plugin.id}:${item.id}`];

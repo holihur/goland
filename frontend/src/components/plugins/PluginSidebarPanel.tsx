@@ -15,7 +15,11 @@ export function PluginSidebarPanel({
   plugins: WorkspacePlugin[];
   panels: Record<string, PluginPanelState>;
   outputs: Record<string, string>;
-  execute: (pluginId: string, commandId: string, input?: { inputs?: Record<string, unknown>; path?: string }) => Promise<{ requestId: string; output: string }>;
+  execute: (
+    pluginId: string,
+    commandId: string,
+    input?: { inputs?: Record<string, unknown>; path?: string; requestId?: string },
+  ) => Promise<{ requestId: string; output: string }>;
   cancel: (pluginId: string, requestId: string) => Promise<void>;
 }) {
   if (!view.startsWith("plugin:")) return null;
