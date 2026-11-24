@@ -166,13 +166,14 @@ export function usePlugins(workspaceId: string) {
     async (
       pluginId: string,
       commandId: string,
-      input: Omit<PluginCommandInput, "requestId"> = {},
+      input: PluginCommandInput = {},
     ): Promise<{ requestId: string; output: string; result?: unknown }> => {
       const requestId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
+        input.requestId ??
+        (typeof crypto !== "undefined" && "randomUUID" in crypto
           ? crypto.randomUUID()
-          : `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      setOutputs((current) => ({ ...current, [requestId]: "" }));
+          : `req-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      setOutputs((current) => ({ ...current, [requestId]: current[requestId] ?? "" }));
       try {
         const result = await executePluginCommand(workspaceId, pluginId, commandId, { ...input, requestId });
         setOutputs((current) => ({
