@@ -19,10 +19,10 @@ async function apiLogin(request: APIRequestContext, who = email) {
   return (await response.json()).csrfToken as string;
 }
 
-async function uiLogin(page: Page, who = email) {
+async function uiLogin(page: Page, who = email, pass = password) {
   await page.goto("/");
   await page.getByLabel("Email").fill(who);
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password").fill(pass);
   await page.getByRole("button", { name: /Sign in/ }).click();
   await expect(page.getByText("New workspace", { exact: true })).toBeVisible({ timeout: 90_000 });
 }
@@ -66,7 +66,7 @@ test("plugin install, enable, UI contributions, hooks and isolation", async ({ b
 
   // Admin installs the packaged example through the UI upload.
   const admin = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  await uiLogin(admin, "admin@goland.local");
+  await uiLogin(admin, "admin@goland.local", "admin123456");
   await admin.locator("header button").last().click();
   await admin.getByText("Plugins", { exact: true }).click();
   await admin.getByLabel("Upload plugin zip").setInputFiles(pluginZip);
