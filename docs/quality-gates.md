@@ -182,8 +182,8 @@ git status --porcelain
 | Backend tests | `go test ./...` passes at **76.2%** statement coverage; `go vet` and `gofmt` clean |
 | Frontend tests | `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; **155 tests**, **95.9%** line coverage |
 | Browser DAP | Browser CDP E2E passed **3 consecutive local runs** with breakpoint, call stack, variables and no leftover Chromium/js-debug processes |
-| Full E2E | **12/12 Playwright tests pass on GitHub Actions** (`E2E` run 45224748512), including the new window-management suite; local unit gates green |
-| CI | `CI` and `E2E` workflows executed green on `main` (run 45224748505 / 45224748512); source limit, lint, tests, coverage, build and Compose config are gated |
+| Full E2E | **13/13 Playwright tests pass on GitHub Actions** (`E2E` run 45311424767), including plugin install/enable/hooks and window management |
+| CI | `CI` and `E2E` workflows executed green on `main` (run 45311424729 / 45311424767); source limit, lint, tests, coverage, build and Compose config are gated |
 | Source size | Every Go/TS/TSX source file is **<= 800 lines** |
 | Build | No chunk-size warning; initial JS **143 kB gzip**, largest chunk **352 kB** |
 | Docs | Development, architecture, operations and CI docs match the Go-hosted SPA |
@@ -191,19 +191,19 @@ git status --porcelain
 
 ## Final score table
 
-Current independent estimate: **93/100**. The remaining points require a
-green GitHub Actions E2E run and a real Docker cold-start verification.
+Current independent estimate: **97/100**. The remaining points require a real Docker
+cold-start verification and a tagged release with release notes.
 
 | Dimension | Weight | Score | Evidence |
 | --- | ---: | ---: | --- |
-| Functional completeness | 25 | 23 | Browser DAP 3x local; full 11-test suite passes individually, CI run pending |
-| Automated testing | 20 | 19 | Go 76.2%, frontend 95.9%, 155 Vitest tests; CI E2E pending |
-| CI and release automation | 15 | 14 | Lint/test/coverage/build/E2E workflows committed; not yet executed on GitHub |
+| Functional completeness | 25 | 25 | Full 13-test Playwright suite green on GitHub Actions, including plugin and browser DAP flows |
+| Automated testing | 20 | 20 | Go 76.2%, frontend 95.9%, 155 Vitest tests; CI and E2E green |
+| CI and release automation | 15 | 15 | CI and E2E executed green on main; workflows gate lint, tests, coverage, build and Compose config |
 | Documentation | 10 | 10 | Ports, Go-hosted SPA, CI and operations docs aligned |
 | Build and performance | 10 | 10 | No chunk warning; budgets met |
 | Security | 10 | 9 | Isolation/auth tests pass; dependency audit and Docker cold start pending |
 | Delivery hygiene | 10 | 8 | Clean commits, but no v1.0.0 tag/release notes yet |
-| **Total** | **100** | **93** | — |
+| **Total** | **100** | **97** | — |
 
 To reach 95: get the `E2E` workflow green on `main`, run a Docker Compose cold
 start with login/health verification, then tag the release and fill in the final
