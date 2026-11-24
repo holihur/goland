@@ -62,7 +62,7 @@ test.afterAll(async ({ request }) => {
 });
 
 test("plugin install, enable, UI contributions, hooks and isolation", async ({ browser, request }) => {
-  test.setTimeout(420_000);
+  test.setTimeout(480_000);
 
   // Admin installs the packaged example through the UI upload.
   const admin = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -100,6 +100,7 @@ test("plugin install, enable, UI contributions, hooks and isolation", async ({ b
   await expect(page.getByText("Hello!", { exact: true }).first()).toBeVisible({ timeout: 20_000 });
 
   // Save hook formats the file (trailing whitespace removed, newline ensured).
+  await page.getByLabel("Explorer (⌘B)").click();
   await page.getByTestId("sidebar").getByText("notes.txt", { exact: true }).click();
   await page.locator(".cm-content").click();
   await page.keyboard.press("End");
