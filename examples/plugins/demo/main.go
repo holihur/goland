@@ -161,7 +161,7 @@ func (p *plugin) command(params commandParams) {
 }
 
 func (p *plugin) slow(id *int64, params commandParams) {
-	for i := 1; i <= 12; i++ {
+	for i := 1; i <= 40; i++ {
 		p.mu.Lock()
 		cancelled := p.cancelled[params.RequestID]
 		p.mu.Unlock()
@@ -174,7 +174,7 @@ func (p *plugin) slow(id *int64, params commandParams) {
 			return
 		}
 		p.notify("command/output", map[string]any{"requestId": params.RequestID, "chunk": fmt.Sprintf("chunk %d\n", i)})
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 	}
 	p.reply(id, map[string]any{"output": "stream complete"})
 }
