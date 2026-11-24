@@ -83,7 +83,7 @@ test("plugin install, enable, UI contributions, hooks and isolation", async ({ b
   await page.getByLabel("Workspace settings").click();
   const settings = page.getByTestId("plugin-settings");
   await expect(settings.getByText("Demo Toolkit")).toBeVisible({ timeout: 20_000 });
-  await settings.getByLabel("Enable Demo Toolkit").check();
+  await settings.getByLabel("Enable Demo Toolkit").click();
   await expect(page.getByText("Demo ready", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   // Declarative panel: run the scan action and read streamed output.
@@ -136,7 +136,7 @@ test("plugin install, enable, UI contributions, hooks and isolation", async ({ b
 
   // Disabling stops the host and removes contributions from the UI.
   await page.getByLabel("Workspace settings").click();
-  await page.getByTestId("plugin-settings").getByLabel("Enable Demo Toolkit").uncheck();
+  await page.getByTestId("plugin-settings").getByLabel("Enable Demo Toolkit").click();
   await expect(page.getByText("Demo ready", { exact: true })).toHaveCount(0, { timeout: 20_000 });
   await page.keyboard.press("Control+k");
   await expect(page.getByText("Demo Toolkit: Say hello", { exact: true })).toHaveCount(0);
