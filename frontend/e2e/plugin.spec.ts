@@ -87,7 +87,7 @@ test("plugin install, enable, UI contributions, hooks and isolation", async ({ b
   await expect(page.getByText("Demo ready", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   // Declarative panel: run the scan action and read streamed output.
-  await page.getByLabel("Demo toolkit").click();
+  await page.locator('[aria-label="Demo toolkit"]').first().click();
   const panel = page.getByTestId("plugin-panel-demo-demo.panel");
   await expect(panel).toBeVisible();
   await panel.getByRole("button", { name: "Scan" }).click();
@@ -126,7 +126,7 @@ test("plugin install, enable, UI contributions, hooks and isolation", async ({ b
     .toBe(200);
   await page.keyboard.type("echo change >> notes.txt && git add notes.txt");
   await page.keyboard.press("Enter");
-  await page.getByLabel("Source control").click();
+  await page.getByLabel("Source control").first().click();
   await page.getByPlaceholder("Commit message").fill("block me");
   await page.getByRole("button", { name: "Commit", exact: true }).click();
   await expect(page.getByText(/Demo plugin blocks commits/)).toBeVisible({ timeout: 20_000 });
