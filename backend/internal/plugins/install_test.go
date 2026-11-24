@@ -81,6 +81,13 @@ func TestInstallDirAndReinstall(t *testing.T) {
 	if installed.Dir != dest {
 		t.Fatalf("dir = %q, want %q", installed.Dir, dest)
 	}
+	dirInfo, err := os.Stat(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dirInfo.Mode().Perm() != 0o755 {
+		t.Fatalf("package dir mode = %v, want 0755", dirInfo.Mode().Perm())
+	}
 	info, err := os.Stat(filepath.Join(dest, "bin", "demo"))
 	if err != nil {
 		t.Fatal(err)

@@ -324,6 +324,10 @@ func (i *Installer) finish(staging string) (*Installed, error) {
 		}
 		return nil, fmt.Errorf("install package: %w", err)
 	}
+	// Staging directories are 0700; workspace users must be able to traverse.
+	if err := os.Chmod(dest, 0o755); err != nil {
+		return nil, fmt.Errorf("set package permissions: %w", err)
+	}
 	if backup != "" {
 		_ = os.RemoveAll(backup)
 	}
