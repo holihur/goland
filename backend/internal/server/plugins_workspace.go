@@ -124,6 +124,7 @@ func (s *Server) updateWorkspacePlugin(w http.ResponseWriter, r *http.Request) {
 			s.stopPluginWorkers(ws.ID.Hex(), rec.PluginID)
 		}
 		if _, err := s.ensurePluginHost(r.Context(), ws, rec, state); err != nil {
+			s.log.Warn("plugin start failed", "plugin", rec.PluginID, "workspace", ws.ID.Hex(), "err", err)
 			// Roll the enablement back so a broken package cannot stay enabled.
 			state.Enabled = false
 			_ = s.store.UpsertWorkspacePlugin(r.Context(), state)
