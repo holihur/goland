@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import type { Diagnostic, User, Workspace } from "@/lib/types";
@@ -18,12 +18,14 @@ import { useDrafts } from "@/lib/useDrafts";
 import { useLSPActions } from "@/lib/useLSPActions";
 import { useTaskRunner } from "@/lib/useTaskRunner";
 import { useEditorViewState } from "@/lib/useEditorViewState";
+import { useBreakpoints } from "@/lib/useBreakpoints";
 import { usePluginContributions } from "@/lib/usePluginContributions";
 import { pluginLspSocket } from "@/lib/plugin-api";
 import { PluginSidebarPanel } from "@/components/plugins/PluginSidebarPanel";
 import { IdeFooter } from "./IdeFooter";
 import { buildPaletteActions } from "./paletteActions";
 import { EditorPane } from "./EditorPane";
+import { ByokDialog, CommandPalette, DebugPanel, GitPanel, OutlinePanel, SearchPanel, SettingsDialog, TokenDialog } from "./lazyViews";
 import {
   DEFAULT_BOTTOM_HEIGHT,
   DEFAULT_SIDEBAR_WIDTH,
@@ -31,23 +33,6 @@ import {
   groupOfPath,
   type SplitDirection,
 } from "@/lib/layout";
-
-const DebugPanel = lazy(() => import("@/components/editor/DebugPanel").then((module) => ({ default: module.DebugPanel })));
-const CommandPalette = lazy(() =>
-  import("@/components/editor/CommandPalette").then((module) => ({ default: module.CommandPalette })),
-);
-const SettingsDialog = lazy(() =>
-  import("@/components/SettingsDialog").then((module) => ({ default: module.SettingsDialog })),
-);
-const TokenDialog = lazy(() => import("@/components/TokenDialog").then((module) => ({ default: module.TokenDialog })));
-const ByokDialog = lazy(() => import("@/components/ByokDialog").then((module) => ({ default: module.ByokDialog })));
-const SearchPanel = lazy(() =>
-  import("@/components/editor/SearchPanel").then((module) => ({ default: module.SearchPanel })),
-);
-const OutlinePanel = lazy(() =>
-  import("@/components/editor/OutlinePanel").then((module) => ({ default: module.OutlinePanel })),
-);
-const GitPanel = lazy(() => import("@/components/editor/GitPanel").then((module) => ({ default: module.GitPanel })));
 
 function tabName(path: string) {
   return path.split("/").pop() ?? path;
@@ -110,13 +95,7 @@ export function IDE({
   const [cursorColumn, setCursorColumn] = useState(1);
   const { viewStateRef, rememberCursor, rememberScroll } = useEditorViewState(activePath, setCursorLine, setCursorColumn);
   const plugins = usePluginContributions(workspace.id, activePath, cursorLine);
-  const [breakpoints, setBreakpoints] = useState<Record<string, number[]>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("goland.breakpoints") || "{}") as Record<string, number[]>;
-    } catch {
-      return {};
-    }
-  });
+  const { breakpoints, setBreakpoints, toggleBreakpoint } = useBreakpoints();
   const [lspClients, setLspClients] = useState<Record<string, LSPClient>>({});
   const [lspStatus, setLspStatus] = useState<Record<string, string>>({});
   const [jumpTo, setJumpTo] = useState<(SourceLocation & { nonce: number }) | null>(null);
@@ -133,10 +112,6 @@ export function IDE({
       lspRef.current = {};
     };
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem("goland.breakpoints", JSON.stringify(breakpoints));
-  }, [breakpoints]);
 
   useEffect(() => {
     if (!restoredPaths.length) return;
@@ -177,21 +152,6 @@ export function IDE({
       cancelled = true;
     };
   }, [workspace.id, restoredPaths, unassignTab, selectTab, draftForFile]);
-
-  const toggleBreakpoint = useCallback(
-    (path: string, line: number) => {
-      setBreakpoints((current) => {
-        const next = { ...current };
-        const lines = new Set(next[path] ?? []);
-        if (lines.has(line)) lines.delete(line);
-        else lines.add(line);
-        if (lines.size) next[path] = [...lines].sort((a, b) => a - b);
-        else delete next[path];
-        return next;
-      });
-    },
-    [],
-  );
 
   const pluginLanguageForPath = (path: string) => {
     const lower = path.toLowerCase();
