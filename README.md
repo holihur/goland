@@ -1,0 +1,190 @@
+# agent
+
+[![CI](https://github.com/holihur/agent/actions/workflows/ci.yml/badge.svg)](https://github.com/holihur/agent/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/holihur/agent/graph/badge.svg)](https://codecov.io/gh/holihur/agent)
+
+## 安装
+
+一键安装(macOS / Linux,自动识别架构、校验 sha256):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/holihur/agent/main/install.sh | sh
+```
+
+可选环境变量:`AGENT_VERSION`(指定 tag)、`AGENT_INSTALL_DIR`(安装目录,默认 `/usr/local/bin` 不可写时落到 `~/.local/bin`)。
+
+或用 Go:
+
+```bash
+go install github.com/holihur/agent/cmd/agent@latest
+```
+
+## 首次上手
+
+```bash
+agent init   # 交互式询问 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL,写入 cwd 下 .env
+agent        # 直接开始
+```
+
+不设凭据直接启动时,报错会给出具体的下一步(设环境变量示例或 `agent init`)。
+
+### 配置文件
+
+cwd 下可选 `agent.json` 作为 flag 默认值(命令行 flag 始终可覆盖):
+
+```json
+{
+  "provider": "",
+  "api": "anthropic",
+  "model": "claude-sonnet-4-5",
+  "max_tokens": 4096,
+  "max_turns": 60,
+  "temperature": 0.2,
+  "session": "work",
+  "session_compress": "auto"
+}
+```
+
+支持字段:`provider`、`api`、`model`、`max_tokens`、`max_turns`、`temperature`、`reasoning_effort`、`session`、`session_compress`、`compress_max_tokens`、`compress_ratio`、`compress_keep`。
+
+### 协议适配(api)
+
+`LLM_API`(或 `-api` flag、`agent.json` 的 `api` 字段)选择端点协议,默认 `anthropic`:
+
+| 取值 | 端点 | 说明 |
+| --- | --- | --- |
+| `anthropic` | `{base}/v1/messages` | Anthropic Messages API(默认) |
+| `openai` | `{base}/v1/chat/completions` | OpenAI Chat Completions(老接口) |
+| `responses` | `{base}/v1/responses` | OpenAI Responses API(新接口) |
+
+```bash
+export LLM_API=openai      # 或 responses;openai/responses 恒用 Bearer 认证
+agent -api responses       # flag 优先于 env
+```
+
+## MCP 接入
+
+```bash
+# 命令行 flag(可重复;stdio 子进程或远程 http(s) URL)
+agent -mcp "fs=npx @modelcontextprotocol/server-filesystem /tmp"
+agent -mcp "remote=https://mcp.example.com/mcp"
+
+# 或 cwd 下 mcp.json(规范见 docs/mcp.json.spec.md)
+```
+
+完整示例(stdio 与 Streamable HTTP 两种传输)见 [examples](examples/README.md)。
+
+## 自我更新
+
+```bash
+agent -version   # 打印版本号(GoReleaser 构建时经 ldflags 注入)
+agent -update    # 检查 GitHub 最新 release,下载归档、校验 sha256 后原子替换当前二进制
+```
+
+本地构建(`dev` 版本)总是升级到最新;已是最新版本时什么都不做。目标目录不可写时兜底安装到 `~/.local/bin/agent`。
+
+## 快速开始
+
+```bash
+echo "3+5 等于几" | agent      # 管道输入,一次性问答
+agent -q "今天星期几"          # -q 一次性问答
+agent                          # 交互 REPL
+```
+
+## 会话持久化
+
+对话历史按会话名存为 cwd 下 `.agent/sessions/<name>.jsonl`(JSONL,一行一条消息):
+
+```bash
+agent -sessions        # 列出已保存会话
+agent -session work    # 续接会话 work(不存在则新建),每轮自动保存;REPL 与 -q 均可
+```
+
+## 嵌入式(Library)
+
+外部 Go 程序可在进程内直接驱动 agent(零 CLI、零 flag,配置全可选):
+
+```go
+import agent "github.com/holihur/agent"
+
+ag, err := agent.New() // 凭据缺省走 env:LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
+if err != nil { log.Fatal(err) }
+defer ag.Close()
+
+_ = ag.Tool("now", "Returns the current time in RFC3339.",
+    map[string]any{"type": "object"},
+    func(_ context.Context, _ json.RawMessage) (string, error) {
+        return time.Now().Format(time.RFC3339), nil
+    })
+_ = ag.MCP(agent.MCPSpec{Name: "echo", Command: []string{"/tmp/echo-mcp"}})
+_ = ag.Shell() // 内置 shell 工具默认关闭,按需开启
+_ = ag.FS()    // 内置文件工具 read/write/edit,默认关闭,按需开启(均支持批量)
+
+ag.OnTextDelta(func(d agent.TextDelta) { fmt.Print(d.Text) })
+answer, err := ag.Run(context.Background(), "现在几点了?用 now 工具回答")
+```
+
+完整示例见 [examples/embedded](examples/README.md)。
+
+## Skills
+
+启动时扫描 cwd 下的 `.agents/skills/`:每个 `<name>/SKILL.md` 即一个技能
+(YAML frontmatter 的 `name`/`description` 可选,`name` 缺省用目录名)。
+技能清单注入 system prompt;模型可调用 `skill` 工具按需加载单个技能的完整指令。
+
+```bash
+agent -skills .agents/skills  # 默认;可改为其他目录(相对 cwd 或绝对路径)
+agent -skills off             # 禁用
+```
+
+## 长期记忆
+
+默认启用:cwd 下 `.agent/memory/` 每键一个 JSON 文件。模型可用
+`memory_save` / `memory_search` / `memory_forget` 三个工具读写;每轮
+system prompt 注入记忆键文件树(键以 `-` 分层),模型无需先调工具即知道有哪些记忆。
+
+```bash
+agent -memory off        # 禁用长期记忆
+agent -memory /path/dir  # 改用其他目录(相对 cwd 或绝对路径)
+```
+
+嵌入式用法:构造时传 `Config{Memory: memory.NewFileStore(dir)}`(nil = 不启用)。
+
+## 内置文件工具
+
+三个内置工具 read / write / edit,均支持批量(一次调用处理多个文件):
+
+- `read`: 传 `paths` 数组批量读,可选 `offset`/`limit`(1-based 行号)分段读大文件;每文件独立成败。
+- `write`: 传 `files: [{path, content}]` 批量写,自动创建父目录,覆盖已有文件。
+- `edit`: 传 `edits: [{path, oldText, newText}]` 批量做精确替换;同文件按序应用(支持链式),任一 `oldText` 缺失或不唯一则整批不落盘(原子)。
+
+文件读写优先用这三个工具;shell 留给 git/grep/构建/列目录等命令。
+
+## Shell 开关
+
+两个独立的 shell 入口,分别用各自的 flag 禁用(`off`/`none` 均可):
+
+```bash
+agent -shell off        # 禁用内置 shell 工具:模型不再能执行命令(MCP/skill 工具不受影响)
+agent -shell-escape off # 禁用 REPL 的 "!" shell 逃逸:仅影响用户手动 !cmd,与 -shell 互不影响
+agent -fs off           # 禁用内置文件工具 read/write/edit:模型不再能直接读写文件
+```
+
+## REPL 命令
+
+交互模式下,以 `/` 开头的输入按命令处理(拦截在对话循环之前,不进历史、不调模型):
+
+```bash
+/help        # 打印帮助文档(列出全部 REPL 命令)
+/exit /quit  # 退出(裸 exit/quit 亦可)
+/new         # 新会话:清空对话历史;-session 时轮转到空闲新名(如 work-2),旧会话保留
+!cmd         # shell 逃逸,如 !git status(见上节)
+```
+
+未知命令给出 `unknown command` 提示并指向 `/help`。`agent -slashcmd off` 可整体禁用 `/` 命令。
+
+## 模型主动退出
+
+内置 `exit` 工具暴露给 LLM:模型判断任务完成(或无法继续)时可调用它主动结束会话。
+调用后当前轮正常收尾(含会话自动保存),REPL 打印 `session: exit requested by agent`
+后以退出码 0 优雅退出,等效于用户输入 `/exit`。

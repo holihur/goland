@@ -1,0 +1,301 @@
+package session
+
+import (
+	"context"
+	"crypto/rand"
+	"embed"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"text/template"
+
+	"github.com/holihur/agent/internal/agent"
+)
+
+// compressTemplateFS 内嵌压缩 prompt 的 markdown 模板:prompts 是可审计、
+// 可独立调优的文本资产而非散落的字符串拼接。
+//
+//go:embed compress_prompt.md
+var compressTemplateFS embed.FS
+
+// compressTemplate 是解析后的默认模板(包级一次,失败属程序员错误,panic 合理)。
+var compressTemplate = template.Must(template.New("compress").Parse(
+	mustRead(compressTemplateFS, "compress_prompt.md")))
+
+// mustRead 从 embed FS 读文件;仅包初始化期调用。
+func mustRead(fsys embed.FS, name string) string {
+	raw, err := fsys.ReadFile(name)
+	if err != nil {
+		panic("session compress: embedded template " + name + ": " + err.Error())
+	}
+	return string(raw)
+}
+
+// transcriptEntry 是模板渲染的一行对话记录。
+type transcriptEntry struct {
+	Role string
+	Text string
+}
+
+// Compressor 是会话压缩算法的接口，便于切换不同实现。
+type Compressor interface {
+	Name() string
+	Compress(ctx context.Context, msgs []agent.Message) (string, error)
+}
+
+// LLMCompressor 通过 LLM 总结历史，需外部注入 SummarizeFn。
+// Template 为空时用内嵌的 compress_prompt.md;非空时须是 text/template,
+// 以 transcriptEntry 切片({{.Role}}/{{.Text}})为数据。
+type LLMCompressor struct {
+	Summarize func(ctx context.Context, prompt string) (string, error)
+	Template  string // 空 → 内嵌默认模板
+}
+
+func (c LLMCompressor) Name() string { return "llm" }
+
+func (c LLMCompressor) Compress(ctx context.Context, msgs []agent.Message) (string, error) {
+	if c.Summarize == nil {
+		return "", fmt.Errorf("session compress: LLMCompressor Summarize is nil")
+	}
+	tpl := compressTemplate
+	if c.Template != "" {
+		parsed, err := template.New("compress").Parse(c.Template)
+		if err != nil {
+			return "", fmt.Errorf("session compress: parse template: %w", err)
+		}
+		tpl = parsed
+	}
+	var entries []transcriptEntry
+	for _, m := range msgs {
+		txt := messagePreview(m)
+		if txt == "" {
+			continue
+		}
+		entries = append(entries, transcriptEntry{Role: string(m.Role), Text: txt})
+	}
+	var b strings.Builder
+	if err := tpl.Execute(&b, entries); err != nil {
+		return "", fmt.Errorf("session compress: render template: %w", err)
+	}
+	return c.Summarize(ctx, b.String())
+}
+
+// Config 是压缩触发的配置。
+type Config struct {
+	MaxTokens  int     // 阈值，如 100000
+	Ratio      float64 // 触发比例，如 0.8 表示 80%
+	KeepRecent int     // 压缩后保留的最近消息数（轮次*2），如 6 表示最后 3 轮
+	Compressor Compressor
+}
+
+// DefaultConfig 返回默认配置：100w 80% 触发，保留最后 6 条消息。
+// Compressor 需外部注入（如 LLMCompressor），未注入时 Validate 会失败。
+func DefaultConfig() Config {
+	return Config{
+		MaxTokens:  100000,
+		Ratio:      0.8,
+		KeepRecent: 6,
+		Compressor: nil,
+	}
+}
+
+// Validate 校验配置合法性。
+func (c Config) Validate() error {
+	if c.MaxTokens <= 0 {
+		return fmt.Errorf("session compress: MaxTokens must be >0")
+	}
+	if c.Ratio <= 0 || c.Ratio > 1 {
+		return fmt.Errorf("session compress: Ratio must be (0,1]")
+	}
+	if c.KeepRecent < 0 {
+		return fmt.Errorf("session compress: KeepRecent must be >=0")
+	}
+	if c.Compressor == nil {
+		return fmt.Errorf("session compress: Compressor is nil")
+	}
+	return nil
+}
+
+// Threshold 返回触发阈值 token 数。
+func (c Config) Threshold() int { return int(float64(c.MaxTokens) * c.Ratio) }
+
+// EstimateTokens 估算消息列表的 token 数，近似 1 token ≈ 4 字符 + 每消息开销 4。
+func EstimateTokens(msgs []agent.Message) int {
+	total := 0
+	for _, m := range msgs {
+		for _, b := range m.Blocks {
+			total += len(b.Text)
+			total += len(b.Content)
+			total += len(b.Input)
+			total += len(b.Name)
+			total += len(b.ToolUseID)
+			total += len(b.ID)
+			total += len(b.Signature)
+		}
+		total += 4 // 每消息开销
+	}
+	// 4 字符≈1 token，向上取整
+	return (total + 3) / 4
+}
+
+// ShouldCompress 判断是否达到压缩阈值。
+func ShouldCompress(msgs []agent.Message, cfg Config) bool {
+	if err := cfg.Validate(); err != nil {
+		return false
+	}
+	return EstimateTokens(msgs) >= cfg.Threshold()
+}
+
+// CompressMessages 执行压缩，返回新消息列表：[summary] + recent。
+// summary 以 assistant 角色的 text 块承载，便于模型理解为历史摘要。
+func CompressMessages(ctx context.Context, msgs []agent.Message, cfg Config) ([]agent.Message, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	if len(msgs) == 0 {
+		return nil, nil
+	}
+	keep := cfg.KeepRecent
+	if keep <= 0 {
+		keep = 6
+	}
+	if keep >= len(msgs) {
+		return msgs, nil
+	}
+	split := len(msgs) - keep
+	oldPart := msgs[:split]
+	recentPart := msgs[split:]
+
+	summary, err := cfg.Compressor.Compress(ctx, oldPart)
+	if err != nil {
+		return nil, fmt.Errorf("session compress: %w", err)
+	}
+	if strings.TrimSpace(summary) == "" {
+		summary = fmt.Sprintf("[compressed %d messages]", len(oldPart))
+	}
+	summaryMsg := agent.Message{
+		Role: agent.RoleAssistant,
+		Blocks: []agent.Block{
+			{Type: agent.BlockText, Text: fmt.Sprintf("[session compressed: %d -> %d messages, summary]\n%s", len(oldPart), 1, summary)},
+		},
+	}
+	out := make([]agent.Message, 0, 1+len(recentPart))
+	out = append(out, summaryMsg)
+	out = append(out, recentPart...)
+	return out, nil
+}
+
+// GenerateSID 生成全新的会话 ID，格式 s_<xid>，xid 为 8 字符 hex。
+func GenerateSID() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return "s_" + hex.EncodeToString(b)
+}
+
+// NextCompressedName 生成压缩后的新会话名，规则：s_xid -> s_xid_1 -> s_xid_2。
+// 兼容任意 base：若 base 已是 s_xid_n 则递增 n，否则从 1 开始。
+func NextCompressedName(base string, existing []string) string {
+	taken := make(map[string]bool, len(existing))
+	for _, n := range existing {
+		taken[n] = true
+	}
+	stem, num := splitCounterUnderscore(base)
+	for i := num + 1; ; i++ {
+		cand := fmt.Sprintf("%s_%d", stem, i)
+		if len(cand) > maxNameLen {
+			cand = cand[:maxNameLen]
+		}
+		if !namePattern.MatchString(cand) {
+			// 截断 stem 以容纳 _数字
+			cut := maxNameLen - len(fmt.Sprintf("_%d", i))
+			if cut < 1 {
+				cut = 1
+			}
+			if len(stem) > cut {
+				stem = stem[:cut]
+			}
+			cand = fmt.Sprintf("%s_%d", stem, i)
+		}
+		if !taken[cand] {
+			return cand
+		}
+	}
+}
+
+func splitCounterUnderscore(name string) (string, int) {
+	// 匹配末尾 _数字
+	idx := strings.LastIndex(name, "_")
+	if idx > 0 && idx < len(name)-1 {
+		suf := name[idx+1:]
+		isNum := true
+		for _, ch := range suf {
+			if ch < '0' || ch > '9' {
+				isNum = false
+				break
+			}
+		}
+		if isNum {
+			var n int
+			fmt.Sscanf(suf, "%d", &n)
+			return name[:idx], n
+		}
+	}
+	return name, 0
+}
+
+func messagePreview(m agent.Message) string {
+	var parts []string
+	for _, b := range m.Blocks {
+		switch b.Type {
+		case agent.BlockText:
+			if b.Text != "" {
+				parts = append(parts, b.Text)
+			}
+		case agent.BlockThinking:
+			if b.Text != "" {
+				parts = append(parts, "[thinking] "+b.Text)
+			}
+		case agent.BlockToolUse:
+			parts = append(parts, fmt.Sprintf("[tool_use %s %s]", b.Name, string(b.Input)))
+		case agent.BlockToolResult:
+			parts = append(parts, fmt.Sprintf("[tool_result %s]", truncate(b.Content, 80)))
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
+// MaybeCompress 检查是否需要压缩，若需要则生成新会话并保存，返回新会话名与新消息。
+// 若无需压缩，返回 compressed=false。
+func MaybeCompress(ctx context.Context, store *FileStore, currentName string, msgs []agent.Message, cfg Config) (newName string, newMsgs []agent.Message, compressed bool, err error) {
+	if currentName == "" || len(msgs) == 0 {
+		return "", nil, false, nil
+	}
+	if !ShouldCompress(msgs, cfg) {
+		return "", nil, false, nil
+	}
+	newMsgs, err = CompressMessages(ctx, msgs, cfg)
+	if err != nil {
+		return "", nil, false, err
+	}
+	names, err := store.Names(ctx)
+	if err != nil {
+		return "", nil, false, err
+	}
+	newName = NextCompressedName(currentName, names)
+	if err := store.Save(ctx, newName, newMsgs); err != nil {
+		return "", nil, false, err
+	}
+	return newName, newMsgs, true, nil
+}
+
+// Ensure json import used for future extension
+var _ = json.Marshal
