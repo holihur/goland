@@ -11,6 +11,7 @@ import { GitPanel } from "@/components/editor/GitPanel";
 import { CommandPalette } from "@/components/editor/CommandPalette";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { TokenDialog } from "@/components/TokenDialog";
+import { ByokDialog } from "@/components/ByokDialog";
 import { ActivityBar, ReferencesDialog, WelcomePane, WorkspaceSettings, type SideView } from "./IDEparts";
 import { BottomPanel } from "./BottomPanel";
 import { EditorGroups, type EditorTab as Tab } from "./EditorGroups";
@@ -94,6 +95,7 @@ export function IDE({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
+  const [byokOpen, setByokOpen] = useState(false);
   const [saving, setSaving] = useState("");
   const [diagnostics, setDiagnostics] = useState<Record<string, Diagnostic[]>>({});
   const [cursorLine, setCursorLine] = useState(1);
@@ -557,6 +559,7 @@ export function IDE({
           onShowSettings={() => showSideView("settings")}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenTokens={() => setTokensOpen(true)}
+          onOpenByok={() => setByokOpen(true)}
         />
 
         <div className="relative flex min-h-0 flex-1">
@@ -647,6 +650,7 @@ export function IDE({
                 outputs={plugins.outputs}
                 execute={plugins.execute}
                 cancel={plugins.cancel}
+                onConfigure={() => showSideView("settings")}
                 onOpenFile={(path, line) =>
                   void openLocation({ path, line, column: 1, endLine: line, endColumn: 1 })
                 }
@@ -780,6 +784,7 @@ export function IDE({
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <TokenDialog open={tokensOpen} onOpenChange={setTokensOpen} />
+      <ByokDialog open={byokOpen} onOpenChange={setByokOpen} />
 
       <CommandPalette
         open={paletteOpen}

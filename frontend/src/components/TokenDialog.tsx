@@ -15,6 +15,7 @@ const SCOPES = [
   { id: "git", label: "Git", help: "Status and diffs" },
   { id: "run", label: "Run", help: "Run tests" },
   { id: "mcp", label: "MCP", help: "Use the Model Context Protocol endpoint" },
+  { id: "ai", label: "AI", help: "Use your BYOK provider keys" },
 ];
 
 export function TokenDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {

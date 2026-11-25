@@ -6,7 +6,7 @@ OpenAPI/Swagger support for Goland implemented as a plugin:
 - show spec overview, servers and endpoint inventory
 - validate the document structure
 - send test HTTP requests using `servers[0].url` or an explicit base URL
-- a native Web Component console with Shadow DOM
+- a native Web Component console with Shadow DOM as the single UI entry point
 
 The plugin executable runs as the workspace Unix user; request testing therefore uses that
 user's network permissions. Spec files are restricted to the workspace root.
@@ -15,7 +15,7 @@ Build and package:
 
 ```bash
 go build -trimpath -o bin/openapi .
-../../../scripts/package-plugin.sh . openapi.zip
+../../scripts/package-plugin.sh . openapi.zip
 ```
 
 Upload `openapi.zip` from the admin Plugins dialog, enable **OpenAPI** in workspace settings,

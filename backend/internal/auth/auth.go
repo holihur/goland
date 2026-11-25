@@ -280,7 +280,7 @@ func TokenHasScope(token *store.APIToken, scope string) bool {
 }
 
 var ValidTokenScopes = map[string]bool{
-	"read": true, "write": true, "git": true, "run": true, "mcp": true,
+	"read": true, "write": true, "git": true, "run": true, "mcp": true, "ai": true,
 }
 
 func IsAdmin(u *store.User) bool { return u != nil && u.Role == "admin" }

@@ -122,7 +122,7 @@ func (p *plugin) run(params commandParams) string {
 		action = "validate"
 	case "openapi.request":
 		action = "request"
-	case "openapi.panel.run":
+	case "openapi.run":
 		if action == "" {
 			action = "overview"
 		}
@@ -155,10 +155,6 @@ func (p *plugin) run(params commandParams) string {
 }
 
 func (p *plugin) publish(action, out string, ok bool) {
-	p.notify("ui/panel", map[string]any{
-		"panelId": "openapi.panel", "output": out,
-		"state": map[string]any{"action": action, "ok": ok},
-	})
 	text := "OpenAPI ready"
 	if !ok {
 		text = "OpenAPI failed"
@@ -261,7 +257,7 @@ func (p *plugin) request(inputs map[string]any) (string, error) {
 		}
 	}
 	if baseURL == "" {
-		return "", fmt.Errorf("base URL is required (set it in the panel or add servers[0].url)")
+		return "", fmt.Errorf("base URL is required (set it in the console or add servers[0].url)")
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
 	method := strings.ToUpper(stringInput(inputs, "method"))

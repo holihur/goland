@@ -1,0 +1,102 @@
+{
+  "apiVersion": 1,
+  "id": "docker",
+  "name": "Docker",
+  "version": "0.1.0",
+  "description": "Inspect containers and images, run Compose services, view logs and build images through the Docker CLI.",
+  "executable": "bin/docker",
+  "contributes": {
+    "commands": [
+      {
+        "id": "docker.ps",
+        "title": "Docker: List containers"
+      },
+      {
+        "id": "docker.images",
+        "title": "Docker: List images"
+      },
+      {
+        "id": "docker.version",
+        "title": "Docker: Version"
+      },
+      {
+        "id": "docker.compose.up",
+        "title": "Docker: Compose up"
+      },
+      {
+        "id": "docker.compose.down",
+        "title": "Docker: Compose down"
+      },
+      {
+        "id": "docker.compose.logs",
+        "title": "Docker: Compose logs"
+      },
+      {
+        "id": "docker.logs",
+        "title": "Docker: Container logs"
+      },
+      {
+        "id": "docker.build",
+        "title": "Docker: Build image"
+      },
+      {
+        "id": "docker.run",
+        "title": "Docker: Run action"
+      }
+    ],
+    "status": [
+      {
+        "id": "docker.status",
+        "text": "Docker",
+        "tooltip": "Docker plugin status",
+        "command": "docker.ps"
+      }
+    ],
+    "settings": [
+      {
+        "id": "docker.settings",
+        "title": "Docker",
+        "fields": [
+          {
+            "key": "binary",
+            "type": "text",
+            "label": "Docker binary",
+            "default": "docker",
+            "required": true
+          },
+          {
+            "key": "host",
+            "type": "text",
+            "label": "DOCKER_HOST",
+            "placeholder": "unix:///var/run/docker.sock",
+            "help": "Leave empty to use the workspace environment."
+          },
+          {
+            "key": "composeFile",
+            "type": "text",
+            "label": "Default Compose file",
+            "default": "docker-compose.yml"
+          },
+          {
+            "key": "timeout",
+            "type": "number",
+            "label": "Command timeout (seconds)",
+            "default": 55,
+            "min": 5,
+            "max": 55
+          }
+        ]
+      }
+    ],
+    "frontends": [
+      {
+        "id": "docker.console",
+        "title": "Docker console",
+        "icon": "container",
+        "entry": "web/app.js",
+        "description": "Native Web Component frontend for the Docker plugin."
+      }
+    ]
+  },
+  "icon": "container"
+}

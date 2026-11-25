@@ -1,0 +1,121 @@
+{
+  "apiVersion": 1,
+  "id": "agent",
+  "name": "Agent",
+  "version": "0.2.0",
+  "description": "Run the local agent coding assistant with BYOK credentials, MCP tools and persistent sessions.",
+  "icon": "brain",
+  "executable": "bin/goland-agent",
+  "contributes": {
+    "commands": [
+      {
+        "id": "agent.ask",
+        "title": "Agent: Ask"
+      },
+      {
+        "id": "agent.sessions",
+        "title": "Agent: List sessions"
+      },
+      {
+        "id": "agent.run",
+        "title": "Agent: Run"
+      }
+    ],
+    "frontends": [
+      {
+        "id": "agent.console",
+        "title": "Agent console",
+        "icon": "brain",
+        "entry": "web/app.js",
+        "description": "Web Component chat console for the local agent CLI."
+      }
+    ],
+    "status": [
+      {
+        "id": "agent.status",
+        "text": "Agent",
+        "tooltip": "Local agent plugin status",
+        "command": "agent.sessions"
+      }
+    ],
+    "settings": [
+      {
+        "id": "agent.settings",
+        "title": "Agent",
+        "fields": [
+          {
+            "key": "binary",
+            "type": "text",
+            "label": "Agent binary",
+            "default": "agent",
+            "required": true
+          },
+          {
+            "key": "api",
+            "type": "select",
+            "label": "Provider API",
+            "options": [
+              {
+                "label": "Anthropic Messages",
+                "value": "anthropic"
+              },
+              {
+                "label": "OpenAI chat completions",
+                "value": "openai"
+              },
+              {
+                "label": "OpenAI responses",
+                "value": "responses"
+              }
+            ],
+            "default": "anthropic"
+          },
+          {
+            "key": "baseUrl",
+            "type": "text",
+            "label": "Base URL",
+            "placeholder": "https://api.longcat.chat/anthropic"
+          },
+          {
+            "key": "model",
+            "type": "text",
+            "label": "Model",
+            "placeholder": "LongCat-2.0"
+          },
+          {
+            "key": "apiKey",
+            "type": "text",
+            "label": "API key",
+            "help": "Optional; prefer a workspace .env file or BYOK-backed environment."
+          },
+          {
+            "key": "session",
+            "type": "text",
+            "label": "Default session",
+            "default": "goland"
+          },
+          {
+            "key": "maxTurns",
+            "type": "number",
+            "label": "Max turns",
+            "default": 8,
+            "min": 1,
+            "max": 40
+          },
+          {
+            "key": "fsTools",
+            "type": "boolean",
+            "label": "Enable file tools",
+            "default": true
+          },
+          {
+            "key": "shellTool",
+            "type": "boolean",
+            "label": "Enable shell tool",
+            "default": false
+          }
+        ]
+      }
+    ]
+  }
+}

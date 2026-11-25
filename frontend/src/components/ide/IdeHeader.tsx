@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Command as CommandIcon,
   GitBranch,
+  Brain,
   KeyRound,
   Play,
   Search,
@@ -35,6 +36,7 @@ export function IdeHeader({
   onShowSettings,
   onOpenSettings,
   onOpenTokens,
+  onOpenByok,
 }: {
   workspace: Workspace;
   user: User;
@@ -47,6 +49,7 @@ export function IdeHeader({
   onShowSettings: () => void;
   onOpenSettings: () => void;
   onOpenTokens: () => void;
+  onOpenByok: () => void;
 }) {
   const { t } = useI18n();
   return (
@@ -143,6 +146,9 @@ export function IdeHeader({
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={onOpenTokens}>
               <KeyRound className="h-4 w-4" /> API tokens
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onOpenByok}>
+              <Brain className="h-4 w-4" /> AI provider keys
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={onExit}>
               <ArrowLeft className="h-4 w-4" /> All workspaces

@@ -2,7 +2,7 @@
 
 Docker support for Goland implemented as a plugin. It contributes:
 
-- a declarative Docker side panel with container, image, Compose, logs and build actions
+- a Docker console with container, image, Compose, logs and build actions
 - a native Web Component console (`web/app.js`) loaded as an ES module with Shadow DOM
 - status-bar health reporting
 - Docker binary, `DOCKER_HOST`, Compose file and timeout settings
@@ -15,7 +15,7 @@ Build and package:
 
 ```bash
 go build -trimpath -o bin/docker .
-../../../scripts/package-plugin.sh . docker.zip
+../../scripts/package-plugin.sh . docker.zip
 ```
 
 Upload `docker.zip` from the admin Plugins dialog, enable **Docker** in a workspace's settings,

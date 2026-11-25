@@ -12,7 +12,13 @@ export interface PluginFrontendApi {
   workspace: Workspace;
   theme: "light" | "dark";
   language: string;
-  execute: (commandId: string, inputs?: Record<string, unknown>) => Promise<{ output: string; result?: unknown }>;
+  execute: (
+    commandId: string,
+    inputs?: Record<string, unknown>,
+    options?: { onChunk?: (chunk: string) => void; onRequest?: (requestId: string) => void },
+  ) => Promise<{ output: string; requestId: string; result?: unknown }>;
+  cancel: (requestId: string) => Promise<void>;
+  setStatus: (text: string, kind?: "info" | "success" | "error" | "running") => void;
   notify: (level: "info" | "warning" | "error", message: string) => void;
   openFile: (path: string, line?: number) => void;
 }
@@ -35,7 +41,10 @@ export function PluginFrontendView({
   frontend,
   workspace,
   execute,
+  cancel,
+  outputs,
   onOpenFile,
+  onConfigure,
 }: {
   plugin: WorkspacePlugin;
   frontend: PluginFrontend;
@@ -45,7 +54,10 @@ export function PluginFrontendView({
     commandId: string,
     input?: { inputs?: Record<string, unknown>; requestId?: string },
   ) => Promise<{ requestId: string; output: string; result?: unknown }>;
+  cancel: (pluginId: string, requestId: string) => Promise<void>;
+  outputs: Record<string, string>;
   onOpenFile?: (path: string, line: number) => void;
+  onConfigure?: () => void;
 }) {
   const { theme } = useTheme();
   const { language } = useI18n();
@@ -54,6 +66,21 @@ export function PluginFrontendView({
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState<{ text: string; kind: "info" | "success" | "error" | "running" }>({
+    text: plugin.health === "running" ? "Ready" : plugin.health === "error" ? "Error" : "Idle",
+    kind: plugin.health === "running" ? "success" : plugin.health === "error" ? "error" : "info",
+  });
+  const listenersRef = useRef<Map<string, (chunk: string) => void>>(new Map());
+  const outputsRef = useRef<Record<string, string>>(outputs);
+
+  useEffect(() => {
+    const previous = outputsRef.current;
+    for (const [requestId, value] of Object.entries(outputs)) {
+      const old = previous[requestId] ?? "";
+      if (value.length > old.length) listenersRef.current.get(requestId)?.(value.slice(old.length));
+    }
+    outputsRef.current = outputs;
+  }, [outputs]);
 
   const api = useMemo<PluginFrontendApi>(
     () => ({
@@ -61,10 +88,22 @@ export function PluginFrontendView({
       workspace,
       theme,
       language,
-      execute: async (commandId, inputs) => {
-        const result = await execute(plugin.id, commandId, { inputs });
-        return { output: result.output, result: result.result };
+      execute: async (commandId, inputs, options) => {
+        const requestId =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        options?.onRequest?.(requestId);
+        if (options?.onChunk) listenersRef.current.set(requestId, options.onChunk);
+        try {
+          const result = await execute(plugin.id, commandId, { requestId, inputs });
+          return { output: result.output, requestId: result.requestId, result: result.result };
+        } finally {
+          listenersRef.current.delete(requestId);
+        }
       },
+      cancel: (requestId) => cancel(plugin.id, requestId),
+      setStatus: (text, kind = "info") => setStatus({ text, kind }),
       notify: (level, message) => {
         if (level === "error") toast.error(message);
         else if (level === "warning") toast.warning(message);
@@ -72,7 +111,7 @@ export function PluginFrontendView({
       },
       openFile: (path, line) => onOpenFile?.(path, line ?? 1),
     }),
-    [plugin.id, workspace, theme, language, execute, onOpenFile],
+    [plugin.id, workspace, theme, language, execute, cancel, onOpenFile],
   );
   const apiRef = useRef(api);
   apiRef.current = api;
@@ -119,13 +158,33 @@ export function PluginFrontendView({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         <span className="truncate">{frontend.title}</span>
-        <button
-          className="ml-auto rounded p-1 hover:bg-accent"
-          title="Reload plugin view"
-          onClick={() => setReloadKey((value) => value + 1)}
+        <span
+          className={
+            status.kind === "error"
+              ? "rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] text-red-400"
+              : status.kind === "running"
+                ? "rounded bg-sky-500/10 px-1.5 py-0.5 text-[9px] text-sky-400"
+                : status.kind === "success"
+                  ? "rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] text-emerald-400"
+                  : "rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground"
+          }
         >
-          <RotateCw className="h-3 w-3" />
-        </button>
+          {status.text}
+        </span>
+        <div className="ml-auto flex items-center gap-0.5">
+          {onConfigure && (
+            <button className="rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider hover:bg-accent" onClick={onConfigure}>
+              Configure
+            </button>
+          )}
+          <button
+            className="rounded p-1 hover:bg-accent"
+            title="Reload plugin view"
+            onClick={() => setReloadKey((value) => value + 1)}
+          >
+            <RotateCw className="h-3 w-3" />
+          </button>
+        </div>
       </div>
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {loading && (

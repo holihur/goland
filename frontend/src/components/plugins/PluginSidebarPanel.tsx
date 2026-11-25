@@ -14,6 +14,7 @@ export function PluginSidebarPanel({
   execute,
   cancel,
   onOpenFile,
+  onConfigure,
 }: {
   view: SideView;
   workspace: Workspace;
@@ -27,6 +28,7 @@ export function PluginSidebarPanel({
   ) => Promise<{ requestId: string; output: string }>;
   cancel: (pluginId: string, requestId: string) => Promise<void>;
   onOpenFile?: (path: string, line: number) => void;
+  onConfigure?: () => void;
 }) {
   if (!view.startsWith("plugin:")) return null;
   const value = view.slice("plugin:".length);
@@ -45,7 +47,10 @@ export function PluginSidebarPanel({
         frontend={frontend}
         workspace={workspace}
         execute={execute}
+        cancel={cancel}
+        outputs={outputs}
         onOpenFile={onOpenFile}
+        onConfigure={onConfigure}
       />
     );
   }

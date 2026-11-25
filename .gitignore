@@ -11,6 +11,6 @@ frontend/playwright-report/
 coverage/
 
 .pi/
-examples/plugins/demo/demo.zip
-examples/plugins/*/bin/
-examples/plugins/*/*.zip
+plugins/demo/demo.zip
+plugins/*/bin/
+plugins/*/*.zip

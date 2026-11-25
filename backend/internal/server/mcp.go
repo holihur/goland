@@ -44,6 +44,7 @@ var mcpTools = []mcpTool{
 	tool("git_diff", "Read a Git diff for a file or the whole workspace.", obj(map[string]any{"workspaceId": str("Workspace id"), "path": str("Optional relative file path"), "cached": boolean("Show staged diff")}, "workspaceId")),
 	tool("list_tests", "Discover Go and Vitest tests.", obj(map[string]any{"workspaceId": str("Workspace id")}, "workspaceId")),
 	tool("run_test", "Run one Go or Vitest test.", obj(map[string]any{"workspaceId": str("Workspace id"), "kind": str("go or vitest"), "path": str("Test file path"), "name": str("Test name")}, "workspaceId", "kind", "path", "name")),
+	tool("ai_chat", "Call the user's BYOK OpenAI-compatible chat provider.", obj(map[string]any{"keyId": str("BYOK key id"), "model": str("Optional model override"), "messages": map[string]any{"type": "array", "description": "Chat messages with role and content"}}, "keyId", "messages")),
 }
 
 func str(description string) map[string]any {
@@ -256,6 +257,21 @@ func (s *Server) callMCPTool(ctx context.Context, token *store.APIToken, name st
 			return "", err
 		}
 		return jsonText(discovery)
+	case "ai_chat":
+		var messages []chatMessage
+		data, _ := json.Marshal(args["messages"])
+		if err := json.Unmarshal(data, &messages); err != nil || len(messages) == 0 {
+			return "", errors.New("messages are required")
+		}
+		var temperature *float64
+		if value, ok := args["temperature"].(float64); ok {
+			temperature = &value
+		}
+		result, err := s.chatCompletion(ctx, token.UserID, argString(args, "keyId"), argString(args, "model"), messages, temperature)
+		if err != nil {
+			return "", err
+		}
+		return jsonText(result)
 	case "run_test":
 		ws, err := s.mcpWorkspace(ctx, token, args)
 		if err != nil {
@@ -304,6 +320,8 @@ func scopeForTool(name string) string {
 		return "git"
 	case "run_test":
 		return "run"
+	case "ai_chat":
+		return "ai"
 	default:
 		return "read"
 	}

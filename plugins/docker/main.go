@@ -126,7 +126,7 @@ func (p *plugin) runCommand(params commandParams) string {
 		action = "logs"
 	case "docker.build":
 		action = "build"
-	case "docker.panel.run":
+	case "docker.run":
 		if action == "" {
 			action = "ps"
 		}
@@ -187,10 +187,6 @@ func (p *plugin) runCommand(params commandParams) string {
 	}
 	p.output = out
 	p.lastKind = action
-	p.notify("ui/panel", map[string]any{
-		"panelId": "docker.panel", "output": out,
-		"state": map[string]any{"action": action, "ok": err == nil},
-	})
 	p.notify("ui/status", map[string]any{
 		"id":      "docker.status",
 		"text":    statusText(action, err == nil),

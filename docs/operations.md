@@ -59,7 +59,7 @@ Disabling stops the host process; the package remains installed.
 Build the example plugin and package it for upload:
 
 ```bash
-cd examples/plugins/demo
+cd plugins/demo
 go build -trimpath -o bin/demo .
 ../../scripts/package-plugin.sh . demo.zip
 ```

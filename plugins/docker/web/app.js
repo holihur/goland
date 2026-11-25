@@ -91,30 +91,55 @@ export default class DockerConsole extends HTMLElement {
     ]) {
       const button = document.createElement("button");
       button.textContent = label;
-      button.addEventListener("click", () => this.run(action));
+      button.dataset.action = action; button.addEventListener("click", () => this.run(action));
       bar.append(button);
     }
+    const cancel = document.createElement("button"); cancel.textContent = "Cancel"; cancel.hidden = true; cancel.addEventListener("click", () => this.cancel()); bar.append(cancel);
+    this._cancelButton = cancel;
     this.shadowRoot.replaceChildren(style, bar, fields, status, output);
   }
 
   async run(action) {
     if (!this._api || this._busy) return;
     this._busy = true;
-    this.shadowRoot.querySelectorAll("button").forEach((button) => (button.disabled = true));
+    this._requestId = "";
+    this._streamed = "";
+    this._output.textContent = "";
+    this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => (button.disabled = true));
+    this._cancelButton.hidden = false;
     this._status.textContent = `Running ${action}…`;
+    this._api.setStatus?.(this._status.textContent, "running");
     try {
       const inputs = { action };
       for (const [key, input] of Object.entries(this._inputs)) inputs[key] = input.value;
-      const result = await this._api.execute("docker.panel.run", inputs);
-      this._output.textContent = result.output || "(no output)";
+      const result = await this._api.execute("docker.run", inputs, {
+        onRequest: (requestId) => { this._requestId = requestId; },
+        onChunk: (chunk) => {
+          this._streamed += chunk;
+          this._output.textContent = this._streamed;
+          this._output.scrollTop = this._output.scrollHeight;
+        },
+      });
+      if (!this._streamed) this._output.textContent = result.output || "(no output)";
       this._status.textContent = `${action} finished`;
+      this._api.setStatus?.(this._status.textContent, "success");
     } catch (err) {
       this._output.textContent = err instanceof Error ? err.message : String(err);
       this._status.textContent = "Docker command failed";
+      this._api.setStatus?.("Docker command failed", "error");
       this._api.notify("error", "Docker command failed");
     } finally {
       this._busy = false;
-      this.shadowRoot.querySelectorAll("button").forEach((button) => (button.disabled = false));
+      this._cancelButton.hidden = true;
+      this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => (button.disabled = false));
     }
   }
+
+  async cancel() {
+    if (!this._requestId || !this._api) return;
+    this._status.textContent = "Cancelling…";
+    this._api.setStatus?.("Cancelling…", "running");
+    try { await this._api.cancel(this._requestId); } catch {}
+  }
+
 }

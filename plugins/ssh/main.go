@@ -127,7 +127,7 @@ func (p *plugin) run(params commandParams) string {
 		action = "test"
 	case "ssh.hosts":
 		action = "hosts"
-	case "ssh.panel.run":
+	case "ssh.run":
 		if action == "" {
 			action = "exec"
 		}
@@ -201,10 +201,6 @@ func (p *plugin) run(params commandParams) string {
 }
 
 func (p *plugin) publish(action, out string, ok bool) {
-	p.notify("ui/panel", map[string]any{
-		"panelId": "ssh.panel", "output": out,
-		"state": map[string]any{"action": action, "ok": ok},
-	})
 	text := "SSH ready"
 	if !ok {
 		text = "SSH command failed"

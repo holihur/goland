@@ -22,7 +22,7 @@ Implemented:
 - AES-256-GCM encrypted Git tokens.
 - Personal access tokens with scoped permissions and a stateless MCP endpoint for external agents.
 - Docker Compose production stack definitions.
-- Docker plugin (`examples/plugins/docker`): container/image inspection, Compose actions, logs, builds, status and a Web Component console.
+- Docker plugin (`plugins/docker`): container/image inspection, Compose actions, logs, builds, status and a Web Component console.
 - Ten languages (including RTL), light/dark themes and a focused settings dialog.
 - Go and Vitest coverage gates, ESLint/typecheck, source file limit and GitHub Actions CI.
 
@@ -68,11 +68,11 @@ the frontend renders only manifest-declared commands, panels, status items and f
 - Languages and debuggers: a plugin can provide stdio LSP/DAP servers. The host proxies
   frames over `/api/ws/workspaces/<id>/plugins/<plugin>/lsp/<server>` and
   `/api/ws/workspaces/<id>/plugins/<plugin>/debug/<kind>`.
-- Example: [`examples/plugins/demo`](examples/plugins/demo) covers commands, panels,
+- Example: [`plugins/demo`](plugins/demo) covers commands, panels,
   status, settings, save formatting and pre-commit hooks. Build and package it with:
 
 ```bash
-cd examples/plugins/demo
+cd plugins/demo
 go build -trimpath -o bin/demo .
 ../../scripts/package-plugin.sh . demo.zip
 ```

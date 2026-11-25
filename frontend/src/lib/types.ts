@@ -9,6 +9,22 @@ export interface User {
   updatedAt: string;
 }
 
+export interface BYOKKey {
+  id: string;
+  provider: string;
+  label: string;
+  baseUrl: string;
+  model: string;
+  hasKey: boolean;
+  lastUsedAt?: string;
+  createdAt: string;
+}
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
 export interface APIToken {
   id: string;
   name: string;

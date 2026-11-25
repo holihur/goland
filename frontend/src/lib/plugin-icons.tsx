@@ -1,6 +1,7 @@
 import {
   Box,
   Boxes,
+  Brain,
   Braces,
   Container,
   Database,
@@ -19,6 +20,7 @@ import {
 const ICONS: Record<string, LucideIcon> = {
   box: Box,
   boxes: Boxes,
+  brain: Brain,
   braces: Braces,
   container: Container,
   database: Database,

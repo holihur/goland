@@ -1,5 +1,7 @@
 import type {
   APIToken,
+  BYOKKey,
+  ChatMessage,
   ContentReplaceResult,
   ContentSearchResult,
   Diagnostic,
@@ -134,6 +136,30 @@ export const api = {
   },
   listTokens() {
     return request<{ tokens: APIToken[] }>("/api/auth/tokens");
+  },
+  listByok() {
+    return request<{ keys: BYOKKey[] }>("/api/auth/byok");
+  },
+  createByok(input: { provider: string; label: string; baseUrl: string; model: string; apiKey: string }) {
+    return request<{ key: BYOKKey }>("/api/auth/byok", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  deleteByok(id: string) {
+    return request<void>(`/api/auth/byok/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+  listModels(input: { baseUrl?: string; apiKey?: string; keyId?: string }) {
+    return request<{ models: string[] }>("/api/ai/models", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  chat(input: { keyId: string; model?: string; messages: ChatMessage[]; temperature?: number }) {
+    return request<{ content: string; role: string; model: string; finish?: string; usage?: Record<string, unknown> }>(
+      "/api/ai/chat",
+      { method: "POST", body: JSON.stringify(input) },
+    );
   },
   createToken(input: { name: string; scopes: string[]; expiresInDays: number }) {
     return request<{ token: string; record: APIToken }>("/api/auth/tokens", {

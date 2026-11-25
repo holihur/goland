@@ -52,6 +52,19 @@ type APIToken struct {
 	CreatedAt  time.Time          `bson:"createdAt" json:"createdAt"`
 }
 
+type BYOKKey struct {
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID       primitive.ObjectID `bson:"userId" json:"userId"`
+	Provider     string             `bson:"provider" json:"provider"`
+	Label        string             `bson:"label" json:"label"`
+	API          string             `bson:"api" json:"api"`
+	BaseURL      string             `bson:"baseUrl" json:"baseUrl"`
+	Model        string             `bson:"model" json:"model"`
+	EncryptedKey string             `bson:"encryptedKey" json:"-"`
+	LastUsedAt   *time.Time         `bson:"lastUsedAt,omitempty" json:"lastUsedAt,omitempty"`
+	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
+}
+
 type Workspace struct {
 	ID             primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	OwnerID        primitive.ObjectID `bson:"ownerId" json:"ownerId"`
@@ -104,6 +117,7 @@ type Store struct {
 	Plugins          *mongo.Collection
 	WorkspacePlugins *mongo.Collection
 	APITokens        *mongo.Collection
+	BYOKKeys         *mongo.Collection
 }
 
 func Connect(ctx context.Context, uri, dbName string) (*Store, error) {
@@ -127,6 +141,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Store, error) {
 		Plugins:          db.Collection("plugins"),
 		WorkspacePlugins: db.Collection("workspacePlugins"),
 		APITokens:        db.Collection("apiTokens"),
+		BYOKKeys:         db.Collection("byokKeys"),
 	}
 	if err := s.ensureIndexes(ctx); err != nil {
 		_ = client.Disconnect(context.Background())
@@ -193,6 +208,12 @@ func (s *Store) ensureIndexes(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("api tokens index: %w", err)
+	}
+	_, err = s.BYOKKeys.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "userId", Value: 1}, {Key: "createdAt", Value: -1}}, Options: options.Index().SetName("byok_user"),
+	})
+	if err != nil {
+		return fmt.Errorf("byok index: %w", err)
 	}
 	return nil
 }
@@ -336,6 +357,53 @@ func (s *Store) DeleteAPIToken(ctx context.Context, userID, id primitive.ObjectI
 func (s *Store) TouchAPIToken(ctx context.Context, id primitive.ObjectID) {
 	now := time.Now().UTC()
 	_, _ = s.APITokens.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{"lastUsedAt": now}})
+}
+
+func (s *Store) CreateBYOKKey(ctx context.Context, key *BYOKKey) error {
+	if key.ID.IsZero() {
+		key.ID = primitive.NewObjectID()
+	}
+	key.CreatedAt = time.Now().UTC()
+	_, err := s.BYOKKeys.InsertOne(ctx, key)
+	return err
+}
+
+func (s *Store) ListBYOKKeys(ctx context.Context, userID primitive.ObjectID) ([]BYOKKey, error) {
+	cur, err := s.BYOKKeys.Find(ctx, bson.M{"userId": userID}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	var out []BYOKKey
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Store) FindBYOKKey(ctx context.Context, userID, id primitive.ObjectID) (*BYOKKey, error) {
+	var key BYOKKey
+	err := s.BYOKKeys.FindOne(ctx, bson.M{"_id": id, "userId": userID}).Decode(&key)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, ErrNotFound
+	}
+	return &key, err
+}
+
+func (s *Store) DeleteBYOKKey(ctx context.Context, userID, id primitive.ObjectID) error {
+	result, err := s.BYOKKeys.DeleteOne(ctx, bson.M{"_id": id, "userId": userID})
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) TouchBYOKKey(ctx context.Context, id primitive.ObjectID) {
+	now := time.Now().UTC()
+	_, _ = s.BYOKKeys.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{"lastUsedAt": now}})
 }
 
 func (s *Store) CreateWorkspace(ctx context.Context, w *Workspace) error {

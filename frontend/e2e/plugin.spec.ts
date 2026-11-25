@@ -4,7 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const repoRoot = process.env.GOLAND_REPO_ROOT ?? resolve(process.cwd(), "..");
-const pluginZip = process.env.GOLAND_E2E_DEMO_PLUGIN ?? resolve(repoRoot, "examples/plugins/demo/demo.zip");
+const pluginZip = process.env.GOLAND_E2E_DEMO_PLUGIN ?? resolve(repoRoot, "plugins/demo/demo.zip");
 const stamp = Date.now();
 const email = `plugin-${stamp}@test.local`;
 const bobEmail = `plugin-bob-${stamp}@test.local`;
