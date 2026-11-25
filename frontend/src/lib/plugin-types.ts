@@ -77,6 +77,14 @@ export interface PluginDebugger {
   server: { command: string; args?: string[]; transport?: string };
 }
 
+export interface PluginFrontend {
+  id: string;
+  title: string;
+  icon?: string;
+  entry: string;
+  description?: string;
+}
+
 export interface PluginContributions {
   commands?: PluginCommand[];
   panels?: PluginPanel[];
@@ -91,6 +99,7 @@ export interface PluginContributions {
   editorActions?: PluginEditorAction[];
   languages?: PluginLanguage[];
   debuggers?: PluginDebugger[];
+  frontends?: PluginFrontend[];
 }
 
 export interface PluginManifest {
@@ -100,6 +109,7 @@ export interface PluginManifest {
   version: string;
   description?: string;
   homepage?: string;
+  icon?: string;
   executable: string;
   contributes: PluginContributions;
 }

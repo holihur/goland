@@ -25,6 +25,8 @@ const (
 )
 
 type ctxKey struct{}
+type tokenKey struct{}
+type sessionKey struct{}
 
 type Manager struct {
 	Store   *store.Store
@@ -103,6 +105,10 @@ func (m *Manager) CreateSession(ctx context.Context, userID interface{ IsZero() 
 }
 
 func (m *Manager) Login(ctx context.Context, user *store.User, r *http.Request) (sessionToken, csrfToken string, err error) {
+	return m.CreateSessionForUser(ctx, user, r, true, m.TTL)
+}
+
+func (m *Manager) CreateSessionForUser(ctx context.Context, user *store.User, r *http.Request, mfaVerified bool, ttl time.Duration) (sessionToken, csrfToken string, err error) {
 	token, err := RandomToken(32)
 	if err != nil {
 		return "", "", err
@@ -111,13 +117,13 @@ func (m *Manager) Login(ctx context.Context, user *store.User, r *http.Request) 
 	if err != nil {
 		return "", "", err
 	}
+	if ttl <= 0 {
+		ttl = m.TTL
+	}
 	now := m.Now().UTC()
 	sess := &store.Session{
-		UserID:    user.ID,
-		TokenHash: TokenHash(token),
-		ExpiresAt: now.Add(m.TTL),
-		CreatedAt: now,
-		UserAgent: r.UserAgent(),
+		UserID: user.ID, TokenHash: TokenHash(token), ExpiresAt: now.Add(ttl),
+		CreatedAt: now, UserAgent: r.UserAgent(), MFAVerified: mfaVerified,
 	}
 	if err := m.Store.CreateSession(ctx, sess); err != nil {
 		return "", "", err
@@ -148,6 +154,24 @@ func (m *Manager) ClearCookies(w http.ResponseWriter) {
 
 func (m *Manager) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if header := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(strings.ToLower(header), "bearer ") {
+			raw := strings.TrimSpace(header[len("bearer "):])
+			token, err := m.Store.FindAPITokenByHash(r.Context(), TokenHash(raw))
+			if err != nil || (token.ExpiresAt != nil && token.ExpiresAt.Before(m.Now().UTC())) {
+				http.Error(w, `{"error":{"code":"unauthorized","message":"invalid or expired API token"}}`, http.StatusUnauthorized)
+				return
+			}
+			user, err := m.Store.FindUserByID(r.Context(), token.UserID)
+			if err != nil {
+				http.Error(w, `{"error":{"code":"unauthorized","message":"user not found"}}`, http.StatusUnauthorized)
+				return
+			}
+			go m.Store.TouchAPIToken(context.Background(), token.ID)
+			ctx := context.WithValue(r.Context(), ctxKey{}, user)
+			ctx = context.WithValue(ctx, tokenKey{}, token)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
 		c, err := r.Cookie(SessionCookie)
 		if err != nil || c.Value == "" {
 			http.Error(w, `{"error":{"code":"unauthorized","message":"authentication required"}}`, http.StatusUnauthorized)
@@ -163,12 +187,49 @@ func (m *Manager) Authenticate(next http.Handler) http.Handler {
 			http.Error(w, `{"error":{"code":"unauthorized","message":"user not found"}}`, http.StatusUnauthorized)
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, user)))
+		ctx := context.WithValue(r.Context(), ctxKey{}, user)
+		ctx = context.WithValue(ctx, sessionKey{}, sess)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (m *Manager) RequireMFA(required bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+			if path == "/api/auth/me" || path == "/api/auth/logout" || strings.HasPrefix(path, "/api/auth/mfa/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if TokenFrom(r.Context()) != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			user := UserFrom(r.Context())
+			sess := SessionFrom(r.Context())
+			if user == nil || sess == nil {
+				http.Error(w, `{"error":{"code":"unauthorized","message":"authentication required"}}`, http.StatusUnauthorized)
+				return
+			}
+			if user.MFAEnabled && !sess.MFAVerified {
+				http.Error(w, `{"error":{"code":"mfa_required","message":"multi-factor authentication required"}}`, http.StatusForbidden)
+				return
+			}
+			if required && !user.MFAEnabled {
+				http.Error(w, `{"error":{"code":"mfa_setup_required","message":"multi-factor authentication enrollment required"}}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func (m *Manager) CSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if TokenFrom(r.Context()) != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
 		switch r.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
 			next.ServeHTTP(w, r)
@@ -194,6 +255,32 @@ func (m *Manager) Logout(ctx context.Context, r *http.Request) {
 func UserFrom(ctx context.Context) *store.User {
 	u, _ := ctx.Value(ctxKey{}).(*store.User)
 	return u
+}
+
+func TokenFrom(ctx context.Context) *store.APIToken {
+	token, _ := ctx.Value(tokenKey{}).(*store.APIToken)
+	return token
+}
+
+func SessionFrom(ctx context.Context) *store.Session {
+	sess, _ := ctx.Value(sessionKey{}).(*store.Session)
+	return sess
+}
+
+func TokenHasScope(token *store.APIToken, scope string) bool {
+	if token == nil {
+		return false
+	}
+	for _, item := range token.Scopes {
+		if item == scope || item == "*" {
+			return true
+		}
+	}
+	return false
+}
+
+var ValidTokenScopes = map[string]bool{
+	"read": true, "write": true, "git": true, "run": true, "mcp": true,
 }
 
 func IsAdmin(u *store.User) bool { return u != nil && u.Role == "admin" }

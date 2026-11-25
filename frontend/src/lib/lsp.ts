@@ -35,6 +35,48 @@ interface TextEdit {
   newText: string;
 }
 
+export interface WorkspaceFileEdit {
+  path: string;
+  edits: TextEdit[];
+}
+
+interface RawWorkspaceEdit {
+  changes?: Record<string, TextEdit[]>;
+  documentChanges?: Array<{ textDocument?: { uri?: string }; edits?: TextEdit[] }>;
+}
+
+export interface CodeAction {
+  title: string;
+  kind?: string;
+  edits: WorkspaceFileEdit[];
+}
+
+export interface DocumentSymbol {
+  name: string;
+  detail?: string;
+  kind: number;
+  range: Range;
+  selectionRange: Range;
+  children?: DocumentSymbol[];
+}
+
+function normalizeWorkspaceEdit(rootPath: string, edit: RawWorkspaceEdit | undefined): WorkspaceFileEdit[] {
+  if (!edit) return [];
+  const out: WorkspaceFileEdit[] = [];
+  if (Array.isArray(edit.documentChanges) && edit.documentChanges.length > 0) {
+    for (const change of edit.documentChanges) {
+      const uri = change.textDocument?.uri;
+      if (!uri || !Array.isArray(change.edits) || change.edits.length === 0) continue;
+      out.push({ path: uriPath(rootPath, uri), edits: change.edits });
+    }
+    return out;
+  }
+  for (const [uri, edits] of Object.entries(edit.changes ?? {})) {
+    if (Array.isArray(edits) && edits.length > 0) out.push({ path: uriPath(rootPath, uri), edits });
+  }
+  return out;
+}
+
 function fileURI(rootPath: string, relative = "") {
   const root = rootPath.replace(/\/+$/, "");
   const full = relative ? `${root}/${relative}` : root;
@@ -161,6 +203,8 @@ export class LSPClient {
             hover: { dynamicRegistration: false, contentFormat: ["markdown", "plaintext"] },
             definition: { dynamicRegistration: false, linkSupport: true },
             references: { dynamicRegistration: false },
+            rename: { dynamicRegistration: false, prepareSupport: false },
+            codeAction: { dynamicRegistration: false, codeActionLiteralSupport: { codeActionKind: { valueSet: ["", "quickfix", "refactor", "source"] } } },
             formatting: { dynamicRegistration: false },
             publishDiagnostics: { relatedInformation: true },
           },
@@ -359,6 +403,82 @@ export class LSPClient {
     );
   }
 
+  async documentSymbols(path: string): Promise<DocumentSymbol[]> {
+    await this.ready;
+    const result = await this.request<
+      Array<
+        Partial<DocumentSymbol> & {
+          location?: { range?: Range };
+        }
+      > | null
+    >("textDocument/documentSymbol", {
+      textDocument: { uri: fileURI(this.rootPath, path) },
+    });
+    const normalize = (symbol: Partial<DocumentSymbol> & { location?: { range?: Range } }): DocumentSymbol | null => {
+      const range = symbol.selectionRange ?? symbol.range ?? symbol.location?.range;
+      if (!range || typeof symbol.name !== "string") return null;
+      return {
+        name: symbol.name,
+        detail: symbol.detail,
+        kind: Number(symbol.kind ?? 0),
+        range: symbol.range ?? range,
+        selectionRange: symbol.selectionRange ?? range,
+        children: (symbol.children ?? []).map(normalize).filter((item): item is DocumentSymbol => !!item),
+      };
+    };
+    return (Array.isArray(result) ? result : [])
+      .map(normalize)
+      .filter((item): item is DocumentSymbol => !!item);
+  }
+
+  async workspaceSymbols(query: string): Promise<SourceLocation[]> {
+    await this.ready;
+    const result = await this.request<Array<{ location?: { uri?: string; range?: Range } }> | null>(
+      "workspace/symbol",
+      { query },
+    );
+    return normalizeLocations(this.rootPath, (result ?? []).map((item) => item.location).filter(Boolean));
+  }
+
+  async rename(path: string, position: Position, newName: string): Promise<WorkspaceFileEdit[]> {
+    await this.ready;
+    const result = await this.request<RawWorkspaceEdit>("textDocument/rename", {
+      textDocument: { uri: fileURI(this.rootPath, path) },
+      position,
+      newName,
+    });
+    return normalizeWorkspaceEdit(this.rootPath, result);
+  }
+
+  async codeActions(path: string, range: Range, diagnostics: Diagnostic[] = []): Promise<CodeAction[]> {
+    await this.ready;
+    const result = await this.request<Array<{ title?: string; kind?: string; edit?: RawWorkspaceEdit }> | null>(
+      "textDocument/codeAction",
+      {
+        textDocument: { uri: fileURI(this.rootPath, path) },
+        range,
+        context: {
+          diagnostics: diagnostics.map((item) => ({
+            range: {
+              start: { line: item.line - 1, character: item.column - 1 },
+              end: { line: item.endLine - 1, character: item.endColumn - 1 },
+            },
+            severity: item.severity === "error" ? 1 : item.severity === "warning" ? 2 : item.severity === "info" ? 3 : 4,
+            message: item.message,
+            source: item.source,
+          })),
+        },
+      },
+    );
+    return (result ?? [])
+      .filter((action) => action && typeof action.title === "string")
+      .map((action) => ({
+        title: action.title as string,
+        kind: action.kind,
+        edits: normalizeWorkspaceEdit(this.rootPath, action.edit),
+      }));
+  }
+
   async formatting(path: string): Promise<TextEdit[]> {
     await this.ready;
     return (
@@ -387,4 +507,4 @@ export function languageForPath(path: string): "go" | "typescript" | null {
   return null;
 }
 
-export type { CompletionItem, TextEdit, Position };
+export type { CompletionItem, TextEdit, Position, Range };

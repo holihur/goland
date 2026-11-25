@@ -117,14 +117,28 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.limiter.success(key)
-	token, csrf, err := s.auth.Login(r.Context(), user, r)
+	if user.MFAEnabled {
+		challenge, _, err := s.auth.CreateSessionForUser(r.Context(), user, r, false, 5*time.Minute)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal", "could not create MFA challenge")
+			return
+		}
+		s.audit(r, "auth.login.mfa_challenge", user.ID.Hex(), "")
+		writeJSON(w, http.StatusOK, map[string]any{"mfaRequired": true, "challengeToken": challenge, "user": user})
+		return
+	}
+	verified := !s.cfg.MFARequired
+	token, csrf, err := s.auth.CreateSessionForUser(r.Context(), user, r, verified, s.auth.TTL)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal", "could not create session")
 		return
 	}
 	s.auth.SetCookies(w, token, csrf)
 	s.audit(r, "auth.login", user.ID.Hex(), "")
-	writeJSON(w, http.StatusOK, map[string]any{"user": user, "csrfToken": csrf})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": user, "csrfToken": csrf,
+		"mfaSetupRequired": s.cfg.MFARequired && !user.MFAEnabled,
+	})
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {

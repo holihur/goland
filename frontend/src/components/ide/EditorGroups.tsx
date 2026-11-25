@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Columns2, FileCode2, Loader2, Puzzle, Rows2, Save, X } from "lucide-react";
+import { Columns2, FileCode2, Lightbulb, Loader2, Puzzle, Rows2, Save, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +42,7 @@ export function EditorGroups({
   onCloseGroup,
   onMoveTab,
   editorActions = [],
+  onLoadCodeActions,
 }: {
   layout: LayoutState;
   compact: boolean;
@@ -56,11 +57,23 @@ export function EditorGroups({
   onCloseGroup: (groupId: string) => void;
   onMoveTab: (path: string, groupId: string) => void;
   editorActions?: Array<{ id: string; title: string; onSelect: () => void }>;
+  onLoadCodeActions?: () => Promise<Array<{ id: string; title: string; run: () => void }>>;
 }) {
   const [dragPath, setDragPath] = useState("");
   const dragPathRef = useRef("");
   const [dropTarget, setDropTarget] = useState("");
+  const [codeActions, setCodeActions] = useState<Array<{ id: string; title: string; run: () => void }>>([]);
+  const [codeActionsLoading, setCodeActionsLoading] = useState(false);
   const hoverGroup = useRef("");
+
+  const loadCodeActions = () => {
+    if (!onLoadCodeActions) return;
+    setCodeActionsLoading(true);
+    void onLoadCodeActions()
+      .then(setCodeActions)
+      .catch(() => setCodeActions([]))
+      .finally(() => setCodeActionsLoading(false));
+  };
   const openPaths = tabs.map((tab) => tab.path);
   const activeGroupId = activeGroupIdOf(layout);
   const rows = compact ? [[activeGroupId]] : layout.rows;
@@ -150,7 +163,10 @@ export function EditorGroups({
                             : "text-muted-foreground hover:bg-accent/40",
                           dragPath === path && "opacity-50",
                         )}
-                        onPointerDown={(event) => beginDrag(event, path)}
+                        onPointerDown={(event) => {
+                          onSelectTab(path);
+                          beginDrag(event, path);
+                        }}
                         onClick={() => onSelectTab(path)}
                         onAuxClick={(event) => event.button === 1 && onCloseTab(path)}
                       >
@@ -176,6 +192,34 @@ export function EditorGroups({
                     );
                   })}
                   <div className="ml-auto flex shrink-0 items-center px-1">
+                    {activeTab && onLoadCodeActions && (
+                      <DropdownMenu onOpenChange={(open) => open && loadCodeActions()}>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            aria-label="Code actions"
+                            title="Code actions"
+                            className="grid h-6 w-6 place-items-center rounded hover:bg-accent"
+                          >
+                            <Lightbulb className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {codeActionsLoading ? (
+                            <DropdownMenuItem disabled>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+                            </DropdownMenuItem>
+                          ) : codeActions.length === 0 ? (
+                            <DropdownMenuItem disabled>No code actions</DropdownMenuItem>
+                          ) : (
+                            codeActions.map((action) => (
+                              <DropdownMenuItem key={action.id} onSelect={action.run}>
+                                {action.title}
+                              </DropdownMenuItem>
+                            ))
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                     {activeTab && editorActions.length > 0 && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

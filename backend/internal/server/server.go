@@ -42,6 +42,7 @@ type Server struct {
 	pluginEvents  *pluginEventHub
 	pluginMu      sync.Mutex
 	pluginWorkers map[string]map[string]func()
+	oidc          *oidcManager
 }
 
 func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Manager, fm *files.Manager, gm *git.Manager, log *slog.Logger) http.Handler {
@@ -51,6 +52,7 @@ func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Ma
 		plugins:     plugins.NewInstaller(filepath.Join(cfg.DataDir, "plugins")),
 		pluginHosts: plugins.NewHostManager(log), pluginEvents: newPluginEventHub(),
 		pluginWorkers: make(map[string]map[string]func()),
+		oidc:          newOIDCManager(cfg),
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -61,12 +63,25 @@ func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Ma
 
 	r.Get("/api/health", s.health)
 	r.Post("/api/auth/login", s.login)
+	r.Post("/api/auth/mfa/verify", s.verifyMFA)
+	r.Get("/api/auth/oidc/config", s.oidcConfig)
+	r.Get("/api/auth/oidc/login", s.oidcLogin)
+	r.Get("/api/auth/oidc/callback", s.oidcCallback)
 
 	r.Route("/api", func(api chi.Router) {
 		api.Use(am.Authenticate)
 		api.Use(am.CSRF)
+		api.Use(am.RequireMFA(cfg.MFARequired))
 		api.Get("/auth/me", s.me)
 		api.Post("/auth/logout", s.logout)
+		api.Get("/auth/mfa/status", s.mfaStatus)
+		api.Post("/auth/mfa/setup", s.setupMFA)
+		api.Post("/auth/mfa/enable", s.enableMFA)
+		api.Post("/auth/mfa/disable", s.disableMFA)
+		api.Get("/auth/tokens", s.listAPITokens)
+		api.Post("/auth/tokens", s.createAPIToken)
+		api.Delete("/auth/tokens/{tokenID}", s.deleteAPIToken)
+		api.Post("/mcp", s.mcpEndpoint)
 
 		api.Route("/admin", func(admin chi.Router) {
 			admin.Use(requireAdmin)
@@ -91,6 +106,8 @@ func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Ma
 				one.Post("/rename", s.renameEntry)
 				one.Delete("/entry", s.deleteEntry)
 				one.Get("/search", s.search)
+				one.Get("/search/content", s.contentSearch)
+				one.Post("/search/replace", s.replaceContent)
 				one.Get("/git/status", s.gitStatus)
 				one.Get("/git/diff", s.gitDiff)
 				one.Post("/git/stage", s.gitStage)
@@ -102,9 +119,15 @@ func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Ma
 				one.Post("/git/pull", s.gitPull)
 				one.Post("/git/push", s.gitPush)
 				one.Get("/git/log", s.gitLog)
+				one.Get("/git/conflict", s.gitConflict)
+				one.Post("/git/resolve", s.gitResolve)
+				one.Post("/git/apply", s.gitApplyPatch)
 				one.Get("/tasks", s.listTasks)
 				one.Get("/tasks/runs", s.taskRuns)
+				one.Get("/tests", s.listTests)
+				one.Post("/tests/run", s.runTest)
 				one.Get("/plugins", s.listWorkspacePlugins)
+				one.Get("/plugins/{pluginID}/frontend/*", s.pluginFrontendAsset)
 				one.Put("/plugins/{pluginID}", s.updateWorkspacePlugin)
 				one.Delete("/plugins/{pluginID}", s.removeWorkspacePlugin)
 				one.Get("/debug/config", s.debugConfig)
@@ -141,7 +164,11 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"user": auth.UserFrom(r.Context())})
+	user := auth.UserFrom(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": user, "mfaRequired": s.cfg.MFARequired,
+		"mfaSetupRequired": s.cfg.MFARequired && user != nil && !user.MFAEnabled,
+	})
 }
 
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {

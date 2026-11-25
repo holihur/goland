@@ -293,6 +293,19 @@ describe("sanitizing persisted layouts", () => {
     expect(layout.bottomView).toBe("terminal");
   });
 
+  it("preserves the tests bottom view", () => {
+    const layout = sanitizeLayout(
+      {
+        bottomView: "tests",
+        rows: [["g1"]],
+        groups: { g1: { paths: [], activePath: "" } },
+        activeGroupId: "g1",
+      },
+      1000,
+    );
+    expect(layout.bottomView).toBe("tests");
+  });
+
   it("drops unknown groups, duplicate paths and caps group count", () => {
     const layout = sanitizeLayout(
       {

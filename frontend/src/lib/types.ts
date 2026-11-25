@@ -3,8 +3,19 @@ export interface User {
   email: string;
   name: string;
   role: "admin" | "member";
+  mfaEnabled: boolean;
+  mfaEnrolledAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface APIToken {
+  id: string;
+  name: string;
+  scopes: string[];
+  expiresAt?: string;
+  lastUsedAt?: string;
+  createdAt: string;
 }
 
 export interface Workspace {
@@ -37,6 +48,25 @@ export interface FileContent {
   binary: boolean;
 }
 
+export interface ContentMatch {
+  path: string;
+  line: number;
+  column: number;
+  endColumn: number;
+  text: string;
+}
+
+export interface ContentSearchResult {
+  matches: ContentMatch[];
+  files: number;
+  truncated: boolean;
+}
+
+export interface ContentReplaceResult {
+  changedFiles: string[];
+  replacements: number;
+}
+
 export interface GitFileStatus {
   path: string;
   origPath?: string;
@@ -50,6 +80,14 @@ export interface GitStatus {
   ahead: number;
   behind: number;
   files: GitFileStatus[];
+}
+
+export interface GitConflict {
+  path: string;
+  base: string;
+  ours: string;
+  theirs: string;
+  working: string;
 }
 
 export interface GitBranch {
@@ -75,6 +113,27 @@ export interface TaskRun {
   output: string;
   createdAt: string;
   finishedAt?: string;
+}
+
+export interface TestItem {
+  id: string;
+  name: string;
+  path: string;
+  line: number;
+  kind: "go" | "vitest";
+  framework: string;
+}
+
+export interface TestDiscovery {
+  tests: TestItem[];
+  frameworks: string[];
+}
+
+export interface TestRunResult {
+  status: "success" | "failed" | "timeout";
+  exitCode: number;
+  output: string;
+  durationMs: number;
 }
 
 export interface Diagnostic {

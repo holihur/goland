@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { User, Workspace } from "@/lib/types";
 import { LoginPage } from "@/components/LoginPage";
+import { MfaSetupPage } from "@/components/MfaSetupPage";
 import { WorkspaceHome } from "@/components/WorkspaceHome";
 import { useI18n } from "@/lib/i18n";
 
@@ -27,6 +28,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedID, setSelectedID] = useState<string>(() => window.location.hash.replace(/^#\/?/, ""));
+  const [mfaSetupRequired, setMfaSetupRequired] = useState(false);
 
   const loadWorkspaces = useCallback(async () => {
     const result = await api.listWorkspaces();
@@ -38,9 +40,14 @@ export default function App() {
     let alive = true;
     api
       .me()
-      .then(({ user: me }) => {
+      .then(({ user: me, mfaSetupRequired: setup }) => {
         if (!alive) return;
         setUser(me);
+        setMfaSetupRequired(setup);
+        if (setup) {
+          setPhase("ready");
+          return;
+        }
         return loadWorkspaces().then(() => alive && setPhase("ready"));
       })
       .catch(() => alive && setPhase("login"));
@@ -80,12 +87,32 @@ export default function App() {
   if (phase === "login" || !user) {
     return (
       <LoginPage
-        onLogin={(me) => {
+        onLogin={(me, setupRequired = false) => {
           setUser(me);
+          setMfaSetupRequired(setupRequired);
+          if (setupRequired) {
+            setPhase("ready");
+            return;
+          }
           setPhase("loading");
           loadWorkspaces()
             .then(() => setPhase("ready"))
             .catch(() => setPhase("ready"));
+        }}
+      />
+    );
+  }
+
+  if (mfaSetupRequired) {
+    return (
+      <MfaSetupPage
+        user={user}
+        onComplete={() => {
+          setMfaSetupRequired(false);
+          setPhase("loading");
+          loadWorkspaces()
+            .then(() => setPhase("ready"))
+            .catch(() => setPhase("login"));
         }}
       />
     );

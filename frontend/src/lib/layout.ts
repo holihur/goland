@@ -17,8 +17,8 @@ export const DEFAULT_BOTTOM_HEIGHT = 230;
 export const MAX_GROUPS = 4;
 export const NARROW_BREAKPOINT = 900;
 
-export type SideView = "explorer" | "search" | "git" | "debug" | "settings" | `plugin:${string}`;
-export type BottomView = "terminal" | "output";
+export type SideView = "explorer" | "search" | "outline" | "git" | "debug" | "settings" | `plugin:${string}`;
+export type BottomView = "terminal" | "output" | "tests";
 export type SplitDirection = "right" | "down";
 
 export interface EditorGroupState {
@@ -43,7 +43,7 @@ export interface LayoutState {
   activeGroupId: string;
 }
 
-const SIDE_VIEWS: SideView[] = ["explorer", "search", "git", "debug", "settings"];
+const SIDE_VIEWS: SideView[] = ["explorer", "search", "outline", "git", "debug", "settings"];
 
 export function isSideView(value: unknown): value is SideView {
   if (typeof value !== "string") return false;
@@ -300,7 +300,8 @@ export function sanitizeLayout(raw: unknown, viewportHeight: number): LayoutStat
     viewportHeight,
   );
   const sideView = isSideView(raw.sideView) ? raw.sideView : fallback.sideView;
-  const bottomView: BottomView = raw.bottomView === "output" ? "output" : "terminal";
+  const bottomView: BottomView =
+    raw.bottomView === "output" ? "output" : raw.bottomView === "tests" ? "tests" : "terminal";
 
   const rawGroups = isRecord(raw.groups) ? raw.groups : {};
   const seen = new Set<string>();

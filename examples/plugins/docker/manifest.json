@@ -1,0 +1,218 @@
+{
+  "apiVersion": 1,
+  "id": "docker",
+  "name": "Docker",
+  "version": "0.1.0",
+  "description": "Inspect containers and images, run Compose services, view logs and build images through the Docker CLI.",
+  "executable": "bin/docker",
+  "contributes": {
+    "commands": [
+      {
+        "id": "docker.ps",
+        "title": "Docker: List containers"
+      },
+      {
+        "id": "docker.images",
+        "title": "Docker: List images"
+      },
+      {
+        "id": "docker.version",
+        "title": "Docker: Version"
+      },
+      {
+        "id": "docker.compose.up",
+        "title": "Docker: Compose up"
+      },
+      {
+        "id": "docker.compose.down",
+        "title": "Docker: Compose down"
+      },
+      {
+        "id": "docker.compose.logs",
+        "title": "Docker: Compose logs"
+      },
+      {
+        "id": "docker.logs",
+        "title": "Docker: Container logs"
+      },
+      {
+        "id": "docker.build",
+        "title": "Docker: Build image"
+      },
+      {
+        "id": "docker.panel.run",
+        "title": "Docker: Run panel action"
+      }
+    ],
+    "panels": [
+      {
+        "id": "docker.panel",
+        "title": "Docker",
+        "icon": "container",
+        "fields": [
+          {
+            "key": "action",
+            "type": "select",
+            "label": "Action",
+            "options": [
+              {
+                "label": "Containers",
+                "value": "ps"
+              },
+              {
+                "label": "Images",
+                "value": "images"
+              },
+              {
+                "label": "Version",
+                "value": "version"
+              },
+              {
+                "label": "Compose up",
+                "value": "compose-up"
+              },
+              {
+                "label": "Compose down",
+                "value": "compose-down"
+              },
+              {
+                "label": "Compose logs",
+                "value": "compose-logs"
+              },
+              {
+                "label": "Container logs",
+                "value": "logs"
+              },
+              {
+                "label": "Build image",
+                "value": "build"
+              }
+            ],
+            "default": "ps"
+          },
+          {
+            "key": "service",
+            "type": "text",
+            "label": "Compose service",
+            "placeholder": "optional service"
+          },
+          {
+            "key": "file",
+            "type": "text",
+            "label": "Compose file",
+            "default": "docker-compose.yml"
+          },
+          {
+            "key": "container",
+            "type": "text",
+            "label": "Container",
+            "placeholder": "name or id for logs"
+          },
+          {
+            "key": "image",
+            "type": "text",
+            "label": "Image tag",
+            "placeholder": "my-app:latest"
+          },
+          {
+            "key": "dockerfile",
+            "type": "text",
+            "label": "Dockerfile",
+            "default": "Dockerfile"
+          },
+          {
+            "key": "context",
+            "type": "text",
+            "label": "Build context",
+            "default": "."
+          }
+        ],
+        "actions": [
+          {
+            "id": "refresh",
+            "label": "Refresh",
+            "command": "docker.panel.run",
+            "args": {
+              "action": "ps"
+            }
+          },
+          {
+            "id": "up",
+            "label": "Compose up",
+            "command": "docker.panel.run",
+            "args": {
+              "action": "compose-up"
+            }
+          },
+          {
+            "id": "down",
+            "label": "Compose down",
+            "command": "docker.panel.run",
+            "args": {
+              "action": "compose-down"
+            }
+          },
+          {
+            "id": "run",
+            "label": "Run selected",
+            "command": "docker.panel.run"
+          }
+        ]
+      }
+    ],
+    "status": [
+      {
+        "id": "docker.status",
+        "text": "Docker",
+        "tooltip": "Docker plugin status",
+        "command": "docker.ps"
+      }
+    ],
+    "settings": [
+      {
+        "id": "docker.settings",
+        "title": "Docker",
+        "fields": [
+          {
+            "key": "binary",
+            "type": "text",
+            "label": "Docker binary",
+            "default": "docker",
+            "required": true
+          },
+          {
+            "key": "host",
+            "type": "text",
+            "label": "DOCKER_HOST",
+            "placeholder": "unix:///var/run/docker.sock",
+            "help": "Leave empty to use the workspace environment."
+          },
+          {
+            "key": "composeFile",
+            "type": "text",
+            "label": "Default Compose file",
+            "default": "docker-compose.yml"
+          },
+          {
+            "key": "timeout",
+            "type": "number",
+            "label": "Command timeout (seconds)",
+            "default": 55,
+            "min": 5,
+            "max": 55
+          }
+        ]
+      }
+    ],
+    "frontends": [
+      {
+        "id": "docker.console",
+        "title": "Docker console",
+        "icon": "container",
+        "entry": "web/app.js",
+        "description": "Native Web Component frontend for the Docker plugin."
+      }
+    ]
+  },
+  "icon": "container"
+}

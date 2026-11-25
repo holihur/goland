@@ -7,13 +7,34 @@
   "executable": "bin/demo",
   "contributes": {
     "commands": [
-      { "id": "demo.hello", "title": "Say hello" },
-      { "id": "demo.scan", "title": "Scan workspace" },
-      { "id": "demo.format", "title": "Format file" },
-      { "id": "demo.slow", "title": "Emit stream" },
-      { "id": "demo.onopen", "title": "Internal open hook" },
-      { "id": "demo.onsave", "title": "Internal save hook" },
-      { "id": "demo.precommit", "title": "Internal pre-commit hook" }
+      {
+        "id": "demo.hello",
+        "title": "Say hello"
+      },
+      {
+        "id": "demo.scan",
+        "title": "Scan workspace"
+      },
+      {
+        "id": "demo.format",
+        "title": "Format file"
+      },
+      {
+        "id": "demo.slow",
+        "title": "Emit stream"
+      },
+      {
+        "id": "demo.onopen",
+        "title": "Internal open hook"
+      },
+      {
+        "id": "demo.onsave",
+        "title": "Internal save hook"
+      },
+      {
+        "id": "demo.precommit",
+        "title": "Internal pre-commit hook"
+      }
     ],
     "panels": [
       {
@@ -21,44 +42,92 @@
         "title": "Demo toolkit",
         "icon": "sparkles",
         "fields": [
-          { "key": "query", "type": "text", "label": "Query", "default": "*.go" },
+          {
+            "key": "query",
+            "type": "text",
+            "label": "Query",
+            "default": "*.go"
+          },
           {
             "key": "mode",
             "type": "select",
             "label": "Mode",
             "options": [
-              { "label": "Files", "value": "files" },
-              { "label": "Lines", "value": "lines" }
+              {
+                "label": "Files",
+                "value": "files"
+              },
+              {
+                "label": "Lines",
+                "value": "lines"
+              }
             ],
             "default": "files"
           }
         ],
         "actions": [
-          { "id": "scan", "label": "Scan", "command": "demo.scan" },
-          { "id": "stream", "label": "Stream output", "command": "demo.slow" }
+          {
+            "id": "scan",
+            "label": "Scan",
+            "command": "demo.scan"
+          },
+          {
+            "id": "stream",
+            "label": "Stream output",
+            "command": "demo.slow"
+          }
         ]
       }
     ],
     "status": [
-      { "id": "demo.status", "text": "Demo ready", "tooltip": "Demo plugin status", "command": "demo.hello" }
+      {
+        "id": "demo.status",
+        "text": "Demo ready",
+        "tooltip": "Demo plugin status",
+        "command": "demo.hello"
+      }
     ],
     "settings": [
       {
         "id": "demo.settings",
         "title": "Demo settings",
         "fields": [
-          { "key": "greeting", "type": "text", "label": "Greeting", "default": "Hello", "required": true },
-          { "key": "formatOnSave", "type": "boolean", "label": "Format on save", "default": true }
+          {
+            "key": "greeting",
+            "type": "text",
+            "label": "Greeting",
+            "default": "Hello",
+            "required": true
+          },
+          {
+            "key": "formatOnSave",
+            "type": "boolean",
+            "label": "Format on save",
+            "default": true
+          }
         ]
       }
     ],
     "hooks": {
-      "onOpen": { "command": "demo.onopen" },
-      "onSave": { "command": "demo.onsave", "failure": "open" },
-      "preCommit": { "command": "demo.precommit", "failure": "closed" }
+      "onOpen": {
+        "command": "demo.onopen"
+      },
+      "onSave": {
+        "command": "demo.onsave",
+        "failure": "open"
+      },
+      "preCommit": {
+        "command": "demo.precommit",
+        "failure": "closed"
+      }
     },
     "editorActions": [
-      { "id": "demo.format.action", "title": "Format with Demo", "command": "demo.format" }
+      {
+        "id": "demo.format.action",
+        "title": "Format with Demo",
+        "command": "demo.format"
+      }
     ]
-  }
+  },
+  "icon": "sparkles"
 }

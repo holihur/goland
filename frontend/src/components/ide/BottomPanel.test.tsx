@@ -36,6 +36,7 @@ function setup(overrides: Partial<Parameters<typeof BottomPanel>[0]> = {}) {
     onClose: vi.fn(),
     onToggleMaximize: vi.fn(),
     onStopTask: vi.fn(),
+    onOpenFile: vi.fn(),
     ...overrides,
   };
   render(<BottomPanel {...props} />);
@@ -50,6 +51,8 @@ describe("BottomPanel", () => {
     expect(props.onSelectView).toHaveBeenCalledWith("output");
     fireEvent.click(screen.getByRole("button", { name: /Terminal/ }));
     expect(props.onSelectView).toHaveBeenCalledWith("terminal");
+    fireEvent.click(screen.getByRole("button", { name: /Tests/ }));
+    expect(props.onSelectView).toHaveBeenCalledWith("tests");
   });
 
   it("shows output and lets the running task be stopped", async () => {

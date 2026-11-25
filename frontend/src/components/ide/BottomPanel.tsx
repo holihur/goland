@@ -1,8 +1,9 @@
 import { lazy, Suspense, type RefObject } from "react";
-import { Circle, Maximize2, Minimize2, PanelBottom, TerminalSquare, X } from "lucide-react";
+import { Circle, FlaskConical, Maximize2, Minimize2, PanelBottom, TerminalSquare, X } from "lucide-react";
 import type { TaskInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { BottomView } from "@/lib/layout";
+import { TestsPanel } from "@/components/editor/TestsPanel";
 
 const TerminalPanel = lazy(() =>
   import("@/components/editor/TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
@@ -22,6 +23,7 @@ export function BottomPanel({
   onClose,
   onToggleMaximize,
   onStopTask,
+  onOpenFile,
 }: {
   workspaceId: string;
   view: BottomView;
@@ -37,6 +39,7 @@ export function BottomPanel({
   onClose: () => void;
   onToggleMaximize: () => void;
   onStopTask: () => void;
+  onOpenFile: (path: string, line: number) => void;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="bottom-panel">
@@ -60,6 +63,16 @@ export function BottomPanel({
           onClick={() => onSelectView("output")}
         >
           <PanelBottom className="h-3 w-3" /> Output
+        </button>
+        <button
+          className={cn(
+            "flex h-full items-center gap-1.5 border-b px-2 text-[10px] uppercase tracking-wider",
+            view === "tests" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
+          )}
+          aria-pressed={view === "tests"}
+          onClick={() => onSelectView("tests")}
+        >
+          <FlaskConical className="h-3 w-3" /> Tests
         </button>
         <button
           className={cn(
@@ -97,6 +110,11 @@ export function BottomPanel({
           </Suspense>
         )}
       </div>
+      {view === "tests" && (
+        <div className="min-h-0 flex-1">
+          <TestsPanel workspaceId={workspaceId} onOpenFile={onOpenFile} />
+        </div>
+      )}
       {view === "output" && (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex h-7 shrink-0 items-center justify-between border-b px-2 text-[10px] text-muted-foreground">

@@ -1,11 +1,18 @@
 import type {
+  APIToken,
+  ContentReplaceResult,
+  ContentSearchResult,
   Diagnostic,
   Entry,
   FileContent,
   GitBranch,
+  GitConflict,
   GitStatus,
   TaskInfo,
   TaskRun,
+  TestDiscovery,
+  TestItem,
+  TestRunResult,
   User,
   Workspace,
 } from "./types";
@@ -71,19 +78,71 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
 export const api = {
   login(email: string, password: string) {
-    return request<{ user: User; csrfToken: string }>("/api/auth/login", {
+    return request<{
+      user: User;
+      csrfToken?: string;
+      mfaRequired?: boolean;
+      challengeToken?: string;
+      mfaSetupRequired?: boolean;
+    }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }).then((result) => {
+      if (result.csrfToken) csrfToken = result.csrfToken;
+      return result;
+    });
+  },
+  oidcConfig() {
+    return request<{ enabled: boolean; name?: string; issuer?: string; loginUrl?: string; error?: string }>(
+      "/api/auth/oidc/config",
+    );
+  },
+  verifyMfa(challengeToken: string, code: string) {
+    return request<{ user: User; csrfToken: string }>("/api/auth/mfa/verify", {
+      method: "POST",
+      body: JSON.stringify({ challengeToken, code }),
+    }).then((result) => {
       csrfToken = result.csrfToken;
       return result;
+    });
+  },
+  mfaStatus() {
+    return request<{ enabled: boolean; required: boolean; enrolledAt?: string; recoveryCodes: number }>(
+      "/api/auth/mfa/status",
+    );
+  },
+  setupMfa() {
+    return request<{ secret: string; otpauthUrl: string }>("/api/auth/mfa/setup", { method: "POST" });
+  },
+  enableMfa(code: string) {
+    return request<{ enabled: boolean; recoveryCodes: string[] }>("/api/auth/mfa/enable", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  },
+  disableMfa(password: string, code: string) {
+    return request<void>("/api/auth/mfa/disable", {
+      method: "POST",
+      body: JSON.stringify({ password, code }),
     });
   },
   logout() {
     return request<void>("/api/auth/logout", { method: "POST" });
   },
   me() {
-    return request<{ user: User }>("/api/auth/me");
+    return request<{ user: User; mfaRequired: boolean; mfaSetupRequired: boolean }>("/api/auth/me");
+  },
+  listTokens() {
+    return request<{ tokens: APIToken[] }>("/api/auth/tokens");
+  },
+  createToken(input: { name: string; scopes: string[]; expiresInDays: number }) {
+    return request<{ token: string; record: APIToken }>("/api/auth/tokens", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  deleteToken(id: string) {
+    return request<void>(`/api/auth/tokens/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
   listUsers() {
     return request<{ users: User[] }>("/api/admin/users");
@@ -150,6 +209,29 @@ export const api = {
       `/api/workspaces/${workspaceId}/search${qs({ q: query, limit: 100 })}`,
     );
   },
+  searchContent(
+    workspaceId: string,
+    input: { query: string; path?: string; regex?: boolean; caseSensitive?: boolean; limit?: number },
+  ) {
+    return request<ContentSearchResult>(
+      `/api/workspaces/${workspaceId}/search/content${qs({
+        q: input.query,
+        path: input.path,
+        regex: input.regex,
+        caseSensitive: input.caseSensitive,
+        limit: input.limit,
+      })}`,
+    );
+  },
+  replaceContent(
+    workspaceId: string,
+    input: { query: string; replacement: string; path?: string; regex?: boolean; caseSensitive?: boolean },
+  ) {
+    return request<ContentReplaceResult>(`/api/workspaces/${workspaceId}/search/replace`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
   gitStatus(workspaceId: string) {
     return request<GitStatus>(`/api/workspaces/${workspaceId}/git/status`);
   },
@@ -157,6 +239,21 @@ export const api = {
     return request<{ diff: string; cached: boolean }>(
       `/api/workspaces/${workspaceId}/git/diff${qs({ path, cached })}`,
     );
+  },
+  gitConflict(workspaceId: string, path: string) {
+    return request<GitConflict>(`/api/workspaces/${workspaceId}/git/conflict${qs({ path })}`);
+  },
+  gitResolve(workspaceId: string, path: string, resolution: "ours" | "theirs" | "both" | "mark" | "content", content = "") {
+    return request<void>(`/api/workspaces/${workspaceId}/git/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ path, resolution, content }),
+    });
+  },
+  gitApplyPatch(workspaceId: string, patch: string, reverse = false) {
+    return request<void>(`/api/workspaces/${workspaceId}/git/apply`, {
+      method: "POST",
+      body: JSON.stringify({ patch, reverse }),
+    });
   },
   gitStage(workspaceId: string, path = "") {
     return request<void>(`/api/workspaces/${workspaceId}/git/stage`, {
@@ -210,6 +307,15 @@ export const api = {
   },
   taskRuns(workspaceId: string) {
     return request<{ runs: TaskRun[] }>(`/api/workspaces/${workspaceId}/tasks/runs`);
+  },
+  listTests(workspaceId: string) {
+    return request<TestDiscovery>(`/api/workspaces/${workspaceId}/tests`);
+  },
+  runTest(workspaceId: string, test: TestItem) {
+    return request<TestRunResult>(`/api/workspaces/${workspaceId}/tests/run`, {
+      method: "POST",
+      body: JSON.stringify(test),
+    });
   },
   diagnostics(workspaceId: string, path: string, content: string) {
     return request<{ diagnostics: Diagnostic[] }>(

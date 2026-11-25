@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { cn, fileLanguage } from "@/lib/utils";
 import type { SourceLocation } from "@/lib/lsp";
 import { pluginDapSocket } from "@/lib/plugin-api";
+import { VariableRow } from "./VariableRow";
 
 export interface PluginDebuggerContribution {
   pluginId: string;
@@ -66,6 +67,22 @@ export function DebugPanel({
   const [groups, setGroups] = useState<VariableGroup[]>([]);
   const [output, setOutput] = useState("");
   const [expression, setExpression] = useState("");
+  const [watches, setWatches] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("goland.watches") || "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
+  const [watchValues, setWatchValues] = useState<Record<string, string>>({});
+  const [newWatch, setNewWatch] = useState("");
+  const [conditions, setConditions] = useState<Record<string, Record<number, string>>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("goland.breakpointConditions") || "{}") as Record<string, Record<number, string>>;
+    } catch {
+      return {};
+    }
+  });
   const [debugConfig, setDebugConfig] = useState<{ chrome: string; node: string; dlv: string } | null>(null);
   const [newPath, setNewPath] = useState(activePath || "");
   const [newLine, setNewLine] = useState("1");
@@ -79,6 +96,14 @@ export function DebugPanel({
   useEffect(() => {
     api.debugConfig(workspace.id).then(setDebugConfig).catch(() => setDebugConfig(null));
   }, [workspace.id]);
+
+  useEffect(() => {
+    localStorage.setItem("goland.watches", JSON.stringify(watches));
+  }, [watches]);
+
+  useEffect(() => {
+    localStorage.setItem("goland.breakpointConditions", JSON.stringify(conditions));
+  }, [conditions]);
 
   useEffect(() => {
     setNewPath(activePath || "");
@@ -110,11 +135,11 @@ export function DebugPanel({
     return path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path;
   };
 
-  const syncBreakpoints = async (client: DAPClient, next = breakpoints) => {
+  const syncBreakpoints = async (client: DAPClient, next = breakpoints, conds = conditions) => {
     for (const [path, lines] of Object.entries(next)) {
       if (!lines.length) continue;
       const absolute = path.startsWith("/") ? path : `${workspace.rootPath.replace(/\/+$/, "")}/${path}`;
-      const result = await client.setBreakpoints(absolute, [...lines].sort((a, b) => a - b));
+      const result = await client.setBreakpoints(absolute, [...lines].sort((a, b) => a - b), conds[path] ?? {});
       if (import.meta.env.DEV) console.debug("[dap-bp]", absolute, JSON.stringify(result));
     }
   };
@@ -403,8 +428,57 @@ export function DebugPanel({
     next[path] = (next[path] ?? []).filter((value) => value !== line);
     if (!next[path].length) delete next[path];
     onBreakpointsChange(next);
-    if (clientRef.current && active) void syncBreakpoints(clientRef.current, next);
+    setConditions((current) => {
+      const lines = { ...(current[path] ?? {}) };
+      delete lines[line];
+      return { ...current, [path]: lines };
+    });
+    if (clientRef.current && active) void syncBreakpoints(clientRef.current, next, conditions);
   };
+
+  const setCondition = (path: string, line: number) => {
+    const current = conditions[path]?.[line] ?? "";
+    const value = window.prompt(`Condition for ${path}:${line}`, current);
+    if (value === null) return;
+    const next = {
+      ...conditions,
+      [path]: { ...(conditions[path] ?? {}), [line]: value.trim() },
+    };
+    setConditions(next);
+    if (clientRef.current && active) void syncBreakpoints(clientRef.current, breakpoints, next);
+  };
+
+  const addWatch = (event: React.FormEvent) => {
+    event.preventDefault();
+    const value = newWatch.trim();
+    if (!value) return;
+    setWatches((current) => (current.includes(value) ? current : [...current, value]));
+    setNewWatch("");
+  };
+
+  useEffect(() => {
+    if (!paused || !clientRef.current) {
+      setWatchValues({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, string> = {};
+      for (const watch of watches) {
+        try {
+          const result = await clientRef.current!.evaluate(watch, selectedFrame?.id);
+          next[watch] = String(result.result ?? "");
+        } catch {
+          next[watch] = "<unavailable>";
+        }
+      }
+      if (!cancelled) setWatchValues(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // clientRef is intentionally read from the ref; paused/frame changes trigger evaluation.
+  }, [watches, paused, selectedFrame?.id]);
 
   const breakpointCount = Object.values(breakpoints).reduce((sum, lines) => sum + lines.length, 0);
 
@@ -519,7 +593,14 @@ export function DebugPanel({
             <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
               Breakpoints ({breakpointCount})
             </span>
-            <button className="text-muted-foreground hover:text-foreground" onClick={() => onBreakpointsChange({})}>
+            <button
+              className="text-muted-foreground hover:text-foreground"
+              title="Clear all breakpoints"
+              onClick={() => {
+                onBreakpointsChange({});
+                setConditions({});
+              }}
+            >
               <Trash2 className="h-3 w-3" />
             </button>
           </div>
@@ -531,13 +612,20 @@ export function DebugPanel({
                   <button className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => onOpenLocation({ path, line, column: 1, endLine: line, endColumn: 1 })}>
                     {path}:{line}
                   </button>
+                  <button
+                    className={cn("shrink-0 text-[9px]", conditions[path]?.[line] ? "text-amber-300" : "text-muted-foreground hover:text-foreground")}
+                    title={conditions[path]?.[line] ? `Condition: ${conditions[path][line]}` : "Set condition"}
+                    onClick={() => setCondition(path, line)}
+                  >
+                    if
+                  </button>
                   <button className="hidden text-muted-foreground group-hover:block" onClick={() => removeBreakpoint(path, line)}>
                     <X className="h-3 w-3" />
                   </button>
                 </div>
               )),
             )}
-            {breakpointCount === 0 && <div className="text-[10px] text-muted-foreground">No breakpoints. Press F9 in the editor.</div>}
+            {breakpointCount === 0 && <div className="text-[10px] text-muted-foreground">No breakpoints. Click the editor gutter or press F9.</div>}
           </div>
           <div className="mt-2 grid grid-cols-[1fr_38px_24px] gap-1">
             <Input
@@ -615,6 +703,38 @@ export function DebugPanel({
           </div>
         )}
 
+        <div className="border-b p-2.5">
+          <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Watch</div>
+          <div className="space-y-0.5">
+            {watches.map((watch) => (
+              <div key={watch} className="group flex items-center gap-1.5 text-[10px]">
+                <span className="min-w-0 flex-1 truncate font-code text-sky-300">{watch}</span>
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                  {paused ? watchValues[watch] ?? "…" : "paused only"}
+                </span>
+                <button
+                  className="hidden text-muted-foreground group-hover:block"
+                  title="Remove watch"
+                  onClick={() => setWatches((current) => current.filter((item) => item !== watch))}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <form onSubmit={addWatch} className="mt-1.5 flex gap-1">
+            <Input
+              value={newWatch}
+              onChange={(event) => setNewWatch(event.target.value)}
+              placeholder="Add watch expression…"
+              className="h-6 font-code text-[9px]"
+            />
+            <Button size="icon-sm" variant="secondary" className="h-6 w-6" type="submit">
+              <Plus className="h-3 w-3" />
+            </Button>
+          </form>
+        </div>
+
         {output && (
           <div className="p-2.5">
             <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Debug console</div>
@@ -634,59 +754,6 @@ export function DebugPanel({
           className="h-7 font-code text-[10px]"
         />
       </form>
-    </div>
-  );
-}
-
-function VariableRow({
-  variable,
-  client,
-  depth,
-}: {
-  variable: Variable;
-  client: DAPClient | null;
-  depth: number;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [children, setChildren] = useState<Variable[]>([]);
-  const expandable = variable.variablesReference > 0;
-
-  const toggle = async () => {
-    if (!expandable || !client) return;
-    if (!expanded && children.length === 0) {
-      try {
-        const result = await client.variables(variable.variablesReference);
-        setChildren((result.variables as Variable[] | undefined) ?? []);
-      } catch {
-        return;
-      }
-    }
-    setExpanded((value) => !value);
-  };
-
-  return (
-    <div>
-      <button
-        className="flex w-full items-center gap-1 rounded px-0.5 py-0.5 text-left text-[9px] hover:bg-accent/60"
-        style={{ paddingLeft: depth * 10 }}
-        onClick={() => void toggle()}
-      >
-        {expandable ? (
-          expanded ? (
-            <ChevronDown className="h-2.5 w-2.5 shrink-0" />
-          ) : (
-            <ChevronRight className="h-2.5 w-2.5 shrink-0" />
-          )
-        ) : (
-          <span className="w-2.5 shrink-0" />
-        )}
-        <span className="shrink-0 text-sky-300">{variable.name}</span>
-        <span className="ml-1 truncate text-muted-foreground">= {variable.value}</span>
-      </button>
-      {expanded &&
-        children.map((child, index) => (
-          <VariableRow key={`${child.name}-${index}`} variable={child} client={client} depth={depth + 1} />
-        ))}
     </div>
   );
 }

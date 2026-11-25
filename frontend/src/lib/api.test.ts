@@ -122,6 +122,16 @@ describe("api endpoints", () => {
       [() => api.renameEntry("w1", "a", "b"), "/api/workspaces/w1/rename", "POST"],
       [() => api.deleteEntry("w1", "a", true), "/api/workspaces/w1/entry?path=a&recursive=true", "DELETE"],
       [() => api.search("w1", "needle"), "/api/workspaces/w1/search?q=needle&limit=100", "GET"],
+      [
+        () => api.searchContent("w1", { query: "needle", regex: true, caseSensitive: true, limit: 10 }),
+        "/api/workspaces/w1/search/content?q=needle&regex=true&caseSensitive=true&limit=10",
+        "GET",
+      ],
+      [
+        () => api.replaceContent("w1", { query: "needle", replacement: "hay", path: "a.go" }),
+        "/api/workspaces/w1/search/replace",
+        "POST",
+      ],
       [() => api.gitStatus("w1"), "/api/workspaces/w1/git/status", "GET"],
       [() => api.gitDiff("w1", "a.go", true), "/api/workspaces/w1/git/diff?path=a.go&cached=true", "GET"],
       [() => api.gitStage("w1", "a.go"), "/api/workspaces/w1/git/stage", "POST"],
@@ -136,6 +146,12 @@ describe("api endpoints", () => {
       [() => api.listTasks("w1"), "/api/workspaces/w1/tasks", "GET"],
       [() => api.runTask("w1", "go:test"), "/api/workspaces/w1/tasks/go:test/run", "POST"],
       [() => api.taskRuns("w1"), "/api/workspaces/w1/tasks/runs", "GET"],
+      [() => api.listTests("w1"), "/api/workspaces/w1/tests", "GET"],
+      [
+        () => api.runTest("w1", { id: "go:a_test.go:TestA", name: "TestA", path: "a_test.go", line: 3, kind: "go", framework: "go" }),
+        "/api/workspaces/w1/tests/run",
+        "POST",
+      ],
       [() => api.diagnostics("w1", "a.go", "code"), "/api/workspaces/w1/diagnostics", "POST"],
       [() => api.startBrowser("w1", "https://example.com"), "/api/workspaces/w1/browser/session", "POST"],
       [() => api.stopBrowser("w1", "b1"), "/api/workspaces/w1/browser/session/b1", "DELETE"],
@@ -158,6 +174,10 @@ describe("api endpoints", () => {
     expect(bodies).toContain(JSON.stringify({ message: "msg" }));
     expect(bodies).toContain(JSON.stringify({ branch: "feature" }));
     expect(bodies).toContain(JSON.stringify({ path: "a.go", content: "code" }));
+    expect(bodies).toContain(JSON.stringify({ query: "needle", replacement: "hay", path: "a.go" }));
+    expect(bodies).toContain(
+      JSON.stringify({ id: "go:a_test.go:TestA", name: "TestA", path: "a_test.go", line: 3, kind: "go", framework: "go" }),
+    );
     expect(bodies).toContain(JSON.stringify({ url: "https://example.com" }));
   });
 });

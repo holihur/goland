@@ -1,25 +1,35 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { Columns2, FileCode2, GitBranch, Maximize2, RotateCcw, Rows2, X } from "lucide-react";
 import { toast } from "sonner";
-import { api, ApiError, taskSocket } from "@/lib/api";
-import type { Diagnostic, TaskInfo, User, Workspace } from "@/lib/types";
+import { api, ApiError } from "@/lib/api";
+import type { Diagnostic, User, Workspace } from "@/lib/types";
 import { LSPClient, languageForPath, type SourceLocation } from "@/lib/lsp";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FileExplorer } from "@/components/editor/FileExplorer";
 import { SearchPanel } from "@/components/editor/SearchPanel";
+import { OutlinePanel } from "@/components/editor/OutlinePanel";
 import { GitPanel } from "@/components/editor/GitPanel";
-import { CommandPalette, paletteIcons, type PaletteAction } from "@/components/editor/CommandPalette";
+import { CommandPalette } from "@/components/editor/CommandPalette";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { TokenDialog } from "@/components/TokenDialog";
 import { ActivityBar, ReferencesDialog, WelcomePane, WorkspaceSettings, type SideView } from "./IDEparts";
 import { BottomPanel } from "./BottomPanel";
 import { EditorGroups, type EditorTab as Tab } from "./EditorGroups";
 import { IdeHeader } from "./IdeHeader";
 import { ResizeDivider } from "./ResizeDivider";
 import { useIdeLayout } from "@/lib/useIdeLayout";
+import { clearDraft } from "@/lib/drafts";
+import { applyTextEdits } from "@/lib/workspaceEdit";
+import { readEditorSettings } from "@/lib/editorSettings";
+import { useDrafts } from "@/lib/useDrafts";
+import { useLSPActions } from "@/lib/useLSPActions";
+import { useTaskRunner } from "@/lib/useTaskRunner";
+import { useEditorViewState } from "@/lib/useEditorViewState";
 import { usePluginContributions } from "@/lib/usePluginContributions";
 import { pluginLspSocket } from "@/lib/plugin-api";
 import { PluginSidebarPanel } from "@/components/plugins/PluginSidebarPanel";
 import { IdeFooter } from "./IdeFooter";
+import { buildPaletteActions } from "./paletteActions";
+import { EditorPane } from "./EditorPane";
 import {
   DEFAULT_BOTTOM_HEIGHT,
   DEFAULT_SIDEBAR_WIDTH,
@@ -28,7 +38,6 @@ import {
   type SplitDirection,
 } from "@/lib/layout";
 
-const CodeEditor = lazy(() => import("@/components/editor/CodeEditor").then((module) => ({ default: module.CodeEditor })));
 const DebugPanel = lazy(() => import("@/components/editor/DebugPanel").then((module) => ({ default: module.DebugPanel })));
 
 function tabName(path: string) {
@@ -47,6 +56,8 @@ export function IDE({
   onWorkspaceChanged: () => void;
 }) {
   const [tabs, setTabs] = useState<Tab[]>([]);
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
   const {
     layout,
     compact,
@@ -78,19 +89,16 @@ export function IDE({
   const terminalOpen = layout.bottomOpen;
   const bottomView = layout.bottomView;
   const initialLayoutRef = useRef(layout);
-  const viewStateRef = useRef<Record<string, { line: number; scrollTop: number }>>({});
   const [treeKey, setTreeKey] = useState(0);
   const [gitKey, setGitKey] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tokensOpen, setTokensOpen] = useState(false);
   const [saving, setSaving] = useState("");
-  const [output, setOutput] = useState("No task output yet.");
-  const [tasks, setTasks] = useState<TaskInfo[]>([]);
-  const [runningTask, setRunningTask] = useState<TaskInfo | null>(null);
-  const taskSocketRef = useRef<WebSocket | null>(null);
-  const outputRef = useRef<HTMLPreElement | null>(null);
   const [diagnostics, setDiagnostics] = useState<Record<string, Diagnostic[]>>({});
   const [cursorLine, setCursorLine] = useState(1);
+  const [cursorColumn, setCursorColumn] = useState(1);
+  const { viewStateRef, rememberCursor, rememberScroll } = useEditorViewState(activePath, setCursorLine, setCursorColumn);
   const plugins = usePluginContributions(workspace.id, activePath, cursorLine);
   const [breakpoints, setBreakpoints] = useState<Record<string, number[]>>(() => {
     try {
@@ -107,6 +115,7 @@ export function IDE({
   const lspErrorNotified = useRef<Set<string>>(new Set());
 
   const activeTab = tabs.find((tab) => tab.path === activePath) ?? null;
+  const draftForFile = useDrafts(user.id, workspace.id, tabs, tabsRef);
 
   useEffect(() => {
     return () => {
@@ -127,6 +136,7 @@ export function IDE({
         try {
           const file = await api.readFile(workspace.id, path);
           if (cancelled) return;
+          const draft = draftForFile(path, file);
           setTabs((prev) =>
             prev.some((tab) => tab.path === path)
               ? prev
@@ -135,10 +145,10 @@ export function IDE({
                   {
                     path,
                     name: tabName(path),
-                    content: file.content ?? "",
-                    etag: file.etag,
+                    content: draft.content,
+                    etag: draft.etag,
                     binary: file.binary,
-                    dirty: false,
+                    dirty: draft.dirty,
                   },
                 ],
           );
@@ -156,7 +166,7 @@ export function IDE({
     return () => {
       cancelled = true;
     };
-  }, [workspace.id, restoredPaths, unassignTab, selectTab]);
+  }, [workspace.id, restoredPaths, unassignTab, selectTab, draftForFile]);
 
   const toggleBreakpoint = useCallback(
     (path: string, line: number) => {
@@ -224,90 +234,68 @@ export function IDE({
     setLspClients({ ...lspRef.current });
   }, [activeTab?.path, workspace.id, workspace.rootPath, plugins.plugins]);
 
-  useEffect(() => {
-    let alive = true;
-    api
-      .listTasks(workspace.id)
-      .then((result) => alive && setTasks(result.tasks))
-      .catch(() => alive && setTasks([]));
-    return () => {
-      alive = false;
-    };
-  }, [workspace.id, gitKey]);
-
-  useEffect(() => {
-    return () => {
-      taskSocketRef.current?.close();
-      taskSocketRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!outputRef.current) return;
-    outputRef.current.scrollTop = outputRef.current.scrollHeight;
-  }, [output, bottomView]);
-
-  const stopTask = useCallback(() => {
-    const socket = taskSocketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "cancel" }));
-    }
-  }, []);
-
-  const runTask = useCallback(
-    (task: TaskInfo) => {
-      taskSocketRef.current?.close();
-      setRunningTask(task);
-      openBottom("output");
-      setOutput(`$ ${task.command} ${task.args.join(" ")}\n`);
-      const socket = new WebSocket(taskSocket(workspace.id, task.id));
-      taskSocketRef.current = socket;
-      socket.onmessage = (event) => {
-        if (typeof event.data !== "string") return;
-        try {
-          const message = JSON.parse(event.data) as {
-            type?: string;
-            data?: string;
-            status?: string;
-            exitCode?: number;
-            message?: string;
-          };
-          if (message.type === "output" && message.data) {
-            setOutput((current) => (current.length > 700_000 ? current.slice(-500_000) : current) + message.data);
-          } else if (message.type === "started") {
-            setOutput((current) => `${current}[started]\n`);
-          } else if (message.type === "exit") {
-            setOutput((current) => `${current}\n[exit ${message.exitCode ?? 0} · ${message.status ?? "finished"}]\n`);
-            setRunningTask(null);
-            setGitKey((value) => value + 1);
-          } else if (message.type === "error") {
-            setOutput((current) => `${current}\n[error] ${message.message ?? "task failed"}\n`);
-            setRunningTask(null);
-          }
-        } catch {
-          setOutput((current) => current + event.data);
-        }
-      };
-      socket.onerror = () => {
-        toast.error("Task connection failed");
-        setRunningTask(null);
-      };
-      socket.onclose = () => {
-        setRunningTask((current) => (current?.id === task.id ? null : current));
-      };
-    },
-    [workspace.id],
-  );
-
   const refreshTree = useCallback(() => setTreeKey((value) => value + 1), []);
   const refreshGit = useCallback(() => {
     setGitKey((value) => value + 1);
     onWorkspaceChanged();
   }, [onWorkspaceChanged]);
 
+  const { tasks, output, setOutput, runningTask, outputRef, runTask, stopTask } = useTaskRunner({
+    workspaceId: workspace.id,
+    refreshKey: gitKey,
+    bottomView,
+    openOutput: () => openBottom("output"),
+    onFinished: () => setGitKey((value) => value + 1),
+  });
+
+  const { renameSymbol, requestCodeActions } = useLSPActions({
+    workspaceId: workspace.id,
+    userId: user.id,
+    activeTab,
+    cursorLine,
+    cursorColumn,
+    diagnostics,
+    tabsRef,
+    setTabs,
+    refreshTree,
+    refreshGit,
+    lspClientForPath,
+  });
+
+  const reloadReplacedFiles = useCallback(
+    async (paths: string[]) => {
+      if (!paths.length) return;
+      const dirty = new Set(tabsRef.current.filter((tab) => tab.dirty).map((tab) => tab.path));
+      let skippedDirty = false;
+      for (const path of paths) {
+        if (dirty.has(path)) {
+          skippedDirty = true;
+          continue;
+        }
+        try {
+          const fresh = await api.readFile(workspace.id, path);
+          setTabs((prev) =>
+            prev.map((tab) =>
+              tab.path === path
+                ? { ...tab, content: fresh.content ?? "", etag: fresh.etag, binary: fresh.binary }
+                : tab,
+            ),
+          );
+        } catch {
+          // The file may have been removed while replacing; refresh the tree anyway.
+        }
+      }
+      if (skippedDirty) toast.warning("Some replaced files have unsaved changes and were not reloaded");
+      refreshTree();
+      refreshGit();
+    },
+    [workspace.id, refreshTree, refreshGit],
+  );
+
   const openFile = useCallback(
     async (path: string, focus = true) => {
       if (!path) return;
+      if (compact) setSidebarOpen(false);
       const existing = tabs.find((tab) => tab.path === path);
       if (existing) {
         const group = groupOfPath(layout, path);
@@ -316,15 +304,16 @@ export function IDE({
       }
       try {
         const file = await api.readFile(workspace.id, path);
+        const draft = draftForFile(path, file);
         setTabs((prev) => [
           ...prev,
           {
             path,
             name: tabName(path),
-            content: file.content ?? "",
-            etag: file.etag,
+            content: draft.content,
+            etag: draft.etag,
             binary: file.binary,
-            dirty: false,
+            dirty: draft.dirty,
           },
         ]);
         assignTab(path);
@@ -333,7 +322,7 @@ export function IDE({
         toast.error(err instanceof ApiError ? err.message : "Could not open file");
       }
     },
-    [tabs, workspace.id, layout, selectTab, assignTab],
+    [tabs, workspace.id, layout, selectTab, assignTab, draftForFile, compact, setSidebarOpen],
   );
 
   const closeTab = (path: string) => {
@@ -341,6 +330,7 @@ export function IDE({
     if (index < 0) return;
     const tab = tabs[index];
     if (tab.dirty && !window.confirm(`Close ${tab.name} without saving?`)) return;
+    clearDraft(user.id, workspace.id, path);
     const next = tabs.filter((item) => item.path !== path);
     lspClientForPath(path)?.closeDocument(path);
     setTabs(next);
@@ -357,13 +347,32 @@ export function IDE({
       if (!tab || tab.binary || saving) return;
       setSaving(path);
       try {
-        const result = await api.writeFile(workspace.id, tab.path, tab.content, tab.etag);
+        let content = tab.content;
+        if (readEditorSettings().formatOnSave) {
+          const formatter = lspClientForPath(path);
+          if (formatter) {
+            try {
+              const edits = await formatter.formatting(path);
+              if (edits.length) {
+                const formatted = applyTextEdits(content, edits);
+                if (formatted !== content) {
+                  content = formatted;
+                  setTabs((prev) => prev.map((item) => (item.path === path ? { ...item, content: formatted } : item)));
+                }
+              }
+            } catch {
+              // Saving still proceeds with the user's content when formatting fails.
+            }
+          }
+        }
+        const result = await api.writeFile(workspace.id, tab.path, content, tab.etag);
         setTabs((prev) =>
           prev.map((item) =>
             item.path === path ? { ...item, content: result.content ?? item.content, etag: result.etag, dirty: false } : item,
           ),
         );
-        void lspClientForPath(path)?.saveDocument(path, tab.content).catch(() => undefined);
+        clearDraft(user.id, workspace.id, path);
+        void lspClientForPath(path)?.saveDocument(path, content).catch(() => undefined);
         toast.success(`Saved ${tab.name}`);
         setGitKey((value) => value + 1);
         onWorkspaceChanged();
@@ -372,6 +381,7 @@ export function IDE({
           if (window.confirm("This file changed on disk. Reload it and discard your local edits?")) {
             try {
               const fresh = await api.readFile(workspace.id, path);
+              clearDraft(user.id, workspace.id, path);
               setTabs((prev) =>
                 prev.map((item) =>
                   item.path === path
@@ -390,7 +400,7 @@ export function IDE({
         setSaving("");
       }
     },
-    [tabs, saving, workspace.id, onWorkspaceChanged],
+    [tabs, saving, workspace.id, onWorkspaceChanged, user.id],
   );
 
   useEffect(() => {
@@ -426,6 +436,9 @@ export function IDE({
       } else if (event.key === "F9") {
         event.preventDefault();
         if (activePath) toggleBreakpoint(activePath, cursorLine);
+      } else if (event.key === "F2") {
+        event.preventDefault();
+        void renameSymbol();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -444,6 +457,7 @@ export function IDE({
     reset,
     split,
     showSideView,
+    renameSymbol,
   ]);
 
   const openLocation = useCallback(
@@ -453,6 +467,27 @@ export function IDE({
     },
     [openFile],
   );
+
+  const goToWorkspaceSymbol = useCallback(async () => {
+    if (!activeTab) return;
+    const lsp = lspClientForPath(activeTab.path);
+    if (!lsp) {
+      toast.error("No language server is available for this file");
+      return;
+    }
+    const query = window.prompt("Go to symbol in workspace:");
+    if (!query?.trim()) return;
+    try {
+      const locations = await lsp.workspaceSymbols(query.trim());
+      if (!locations.length) {
+        toast.info("No matching symbols");
+        return;
+      }
+      await openLocation(locations[0]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Symbol search failed");
+    }
+  }, [activeTab, openLocation]);
 
   const selectSideView = (next: SideView) => {
     if (view === next && sidebarOpen) {
@@ -467,124 +502,42 @@ export function IDE({
     if (group) selectTab(group, path);
   };
 
-  const rememberCursor = (path: string, line: number) => {
-    const current = viewStateRef.current[path] ?? { line: 1, scrollTop: 0 };
-    viewStateRef.current[path] = { ...current, line };
-    if (path === activePath) setCursorLine(line);
-  };
+  const paletteActions = buildPaletteActions({
+    activePath,
+    layout,
+    tabs,
+    compact,
+    saveTab: (path) => void saveTab(path),
+    toggleBottom,
+    openBottom,
+    showSideView,
+    goToWorkspaceSymbol: () => void goToWorkspaceSymbol(),
+    split,
+    closeEditorGroup,
+    setBottomMaximized,
+    reset,
+    pluginActions: plugins.pluginPaletteActions,
+  });
 
-  const rememberScroll = (path: string, scrollTop: number) => {
-    const current = viewStateRef.current[path] ?? { line: 1, scrollTop: 0 };
-    viewStateRef.current[path] = { ...current, scrollTop };
-  };
-
-  const paletteActions: PaletteAction[] = [
-    {
-      id: "save",
-      label: "Save active file",
-      hint: "⌘S",
-      icon: paletteIcons.save,
-      run: () => activePath && void saveTab(activePath),
-    },
-    {
-      id: "terminal",
-      label: "Toggle terminal",
-      hint: "⌘`",
-      icon: paletteIcons.terminal,
-      run: () => toggleBottom(),
-    },
-    {
-      id: "explorer",
-      label: "Show explorer",
-      icon: paletteIcons.explorer,
-      run: () => showSideView("explorer"),
-    },
-    {
-      id: "git",
-      label: "Show source control",
-      icon: <GitBranch className="h-3.5 w-3.5" />,
-      run: () => showSideView("git"),
-    },
-    {
-      id: "split-right",
-      label: "Split editor right",
-      hint: "⌘\\",
-      icon: <Columns2 className="h-3.5 w-3.5" />,
-      run: () => {
-        if (!compact) split("right");
-      },
-    },
-    {
-      id: "split-down",
-      label: "Split editor down",
-      hint: "⌘⇧\\",
-      icon: <Rows2 className="h-3.5 w-3.5" />,
-      run: () => {
-        if (!compact) split("down");
-      },
-    },
-    {
-      id: "close-group",
-      label: "Close editor group",
-      hint: "⌘⌥\\",
-      icon: <X className="h-3.5 w-3.5" />,
-      run: () => {
-        if (layout.rows.flat().length > 1) closeEditorGroup(activeGroupIdOf(layout));
-      },
-    },
-    {
-      id: "maximize-panel",
-      label: layout.bottomMaximized ? "Restore panel size" : "Maximize panel",
-      icon: <Maximize2 className="h-3.5 w-3.5" />,
-      run: () => setBottomMaximized(!layout.bottomMaximized),
-    },
-    {
-      id: "reset-layout",
-      label: "Reset layout",
-      hint: "⌘⌥0",
-      icon: <RotateCcw className="h-3.5 w-3.5" />,
-      run: () => reset(tabs.map((tab) => tab.path), activePath),
-    },
-    ...plugins.pluginPaletteActions,
-  ];
-
-  const renderEditor = (path: string) => {
-    const tab = tabs.find((item) => item.path === path);
-    if (!tab) return null;
-    if (tab.binary) {
-      return (
-        <div className="grid h-full place-items-center">
-          <div className="max-w-sm text-center">
-            <FileCode2 className="mx-auto h-9 w-9 text-muted-foreground" />
-            <h2 className="mt-3 text-sm font-medium">Binary file</h2>
-            <p className="mt-1 text-xs text-muted-foreground">{path} cannot be displayed in the text editor.</p>
-          </div>
-        </div>
-      );
-    }
-    const state = viewStateRef.current[path];
-    return (
-      <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">Loading editor…</div>}>
-        <CodeEditor
-          key={path}
-          path={path}
-          value={tab.content}
-          onChange={(value) => updateContent(path, value)}
-          onSave={() => void saveTab(path)}
-          diagnostics={diagnostics[path] ?? []}
-          lsp={lspClients[lspTargetForPath(path)?.key ?? ""] ?? null}
-          jumpTo={jumpTo?.path === path ? jumpTo : null}
-          onOpenLocation={(location) => void openLocation(location)}
-          onReferences={(locations) => setReferences(locations)}
-          breakpoints={breakpoints[path] ?? []}
-          initialCursorLine={state?.line ?? 0}
-          initialScrollTop={state?.scrollTop ?? 0}
-          onCursorChange={(line) => rememberCursor(path, line)}
-          onScrollChange={(scrollTop) => rememberScroll(path, scrollTop)}
-        />
-      </Suspense>
-    );
-  };
+  const renderEditor = (path: string) => (
+    <EditorPane
+      path={path}
+      tabs={tabs}
+      diagnostics={diagnostics}
+      lspClients={lspClients}
+      lspTargetForPath={lspTargetForPath}
+      jumpTo={jumpTo}
+      openLocation={openLocation}
+      setReferences={setReferences}
+      breakpoints={breakpoints}
+      toggleBreakpoint={toggleBreakpoint}
+      updateContent={updateContent}
+      saveTab={saveTab}
+      rememberCursor={rememberCursor}
+      rememberScroll={rememberScroll}
+      viewStateRef={viewStateRef}
+    />
+  );
 
   const lineCount = activeTab && !activeTab.binary ? activeTab.content.split("\n").length : 0;
   const problems = Object.values(diagnostics).reduce((count, items) => count + items.length, 0);
@@ -603,9 +556,10 @@ export function IDE({
           onShowDebug={() => showSideView("debug")}
           onShowSettings={() => showSideView("settings")}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenTokens={() => setTokensOpen(true)}
         />
 
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
           <ActivityBar
             view={view}
             sidebarOpen={sidebarOpen}
@@ -616,10 +570,21 @@ export function IDE({
 
           {sidebarOpen && (
             <>
+            {compact && (
+              <button
+                aria-label="Close sidebar"
+                className="absolute inset-y-0 left-11 right-0 z-20 bg-black/30"
+                onClick={() => setSidebarOpen(false)}
+              />
+            )}
             <aside
               data-testid="sidebar"
-              className="flex shrink-0 flex-col border-r bg-panel"
-              style={{ width: layout.sidebarWidth }}
+              className={
+                compact
+                  ? "absolute inset-y-0 left-11 z-30 flex w-[82vw] max-w-[320px] flex-col border-r bg-panel shadow-2xl"
+                  : "flex shrink-0 flex-col border-r bg-panel"
+              }
+              style={compact ? undefined : { width: layout.sidebarWidth }}
             >
               {view === "explorer" && (
                 <FileExplorer
@@ -629,7 +594,23 @@ export function IDE({
                   onChanged={refreshTree}
                 />
               )}
-              {view === "search" && <SearchPanel workspaceId={workspace.id} onOpenFile={openFile} />}
+              {view === "search" && (
+                <SearchPanel
+                  workspaceId={workspace.id}
+                  onOpenFile={(path, line, column) => {
+                    if (line) void openLocation({ path, line, column: column ?? 1, endLine: line, endColumn: column ?? 1 });
+                    else void openFile(path);
+                  }}
+                  onReplaced={(paths) => void reloadReplacedFiles(paths)}
+                />
+              )}
+              {view === "outline" && (
+                <OutlinePanel
+                  path={activePath}
+                  lsp={activeTab ? lspClients[lspTargetForPath(activeTab.path)?.key ?? ""] ?? null : null}
+                  onOpenLocation={(location) => void openLocation(location)}
+                />
+              )}
               {view === "git" && (
                 <GitPanel
                   workspaceId={workspace.id}
@@ -660,22 +641,28 @@ export function IDE({
               {view === "settings" && <WorkspaceSettings workspace={workspace} />}
               <PluginSidebarPanel
                 view={view}
+                workspace={workspace}
                 plugins={plugins.enabled}
                 panels={plugins.panels}
                 outputs={plugins.outputs}
                 execute={plugins.execute}
                 cancel={plugins.cancel}
+                onOpenFile={(path, line) =>
+                  void openLocation({ path, line, column: 1, endLine: line, endColumn: 1 })
+                }
               />
             </aside>
-            <ResizeDivider
-              axis="x"
-              value={layout.sidebarWidth}
-              min={180}
-              max={sidebarMax}
-              label="Resize sidebar"
-              onChange={setSidebarWidth}
-              onReset={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
-            />
+            {!compact && (
+              <ResizeDivider
+                axis="x"
+                value={layout.sidebarWidth}
+                min={180}
+                max={sidebarMax}
+                label="Resize sidebar"
+                onChange={setSidebarWidth}
+                onReset={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
+              />
+            )}
             </>
           )}
 
@@ -702,13 +689,14 @@ export function IDE({
                   onCloseGroup={closeEditorGroup}
                   onMoveTab={moveTabToGroup}
                   editorActions={plugins.pluginEditorActions}
+                  onLoadCodeActions={requestCodeActions}
                 />
               )}
             </div>
 
             {terminalOpen && (
               <>
-                {!layout.bottomMaximized && (
+                {!layout.bottomMaximized && !compact && (
                   <ResizeDivider
                     axis="y"
                     value={layout.bottomHeight}
@@ -723,9 +711,17 @@ export function IDE({
                   className={
                     layout.bottomMaximized
                       ? "absolute inset-0 z-20 flex flex-col border-t bg-background"
-                      : "flex shrink-0 flex-col border-t"
+                      : compact
+                        ? "absolute inset-x-0 bottom-0 z-20 flex flex-col border-t bg-background shadow-2xl"
+                        : "flex shrink-0 flex-col border-t"
                   }
-                  style={layout.bottomMaximized ? undefined : { height: layout.bottomHeight }}
+                  style={
+                    layout.bottomMaximized
+                      ? undefined
+                      : compact
+                        ? { height: "min(50vh, 380px)" }
+                        : { height: layout.bottomHeight }
+                  }
                 >
                   <BottomPanel
                     workspaceId={workspace.id}
@@ -751,6 +747,9 @@ export function IDE({
                     }}
                     onToggleMaximize={() => setBottomMaximized(!layout.bottomMaximized)}
                     onStopTask={stopTask}
+                    onOpenFile={(path, line) =>
+                      void openLocation({ path, line, column: 1, endLine: line, endColumn: 1 })
+                    }
                   />
                 </div>
               </>
@@ -780,6 +779,7 @@ export function IDE({
       />
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <TokenDialog open={tokensOpen} onOpenChange={setTokensOpen} />
 
       <CommandPalette
         open={paletteOpen}

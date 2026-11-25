@@ -1,17 +1,20 @@
 module goland
 
-go 1.24
+go 1.26.0
 
 require (
+	github.com/coreos/go-oidc/v3 v3.21.0
+	github.com/creack/pty v1.1.24
 	github.com/go-chi/chi/v5 v5.2.2
+	github.com/gorilla/websocket v1.5.3
 	go.mongodb.org/mongo-driver v1.17.4
 	golang.org/x/crypto v0.36.0
+	golang.org/x/oauth2 v0.38.0
 )
 
 require (
-	github.com/creack/pty v1.1.24 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect

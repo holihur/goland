@@ -96,6 +96,9 @@ func TestValidateManifestFields(t *testing.T) {
 		"backslash executable": func(m *Manifest) {
 			m.Executable = `bin\x`
 		},
+		"invalid frontend entry": func(m *Manifest) {
+			m.Contributes.Frontends = []Frontend{{ID: "demo.plugin.console", Title: "Console", Entry: "web/app.html"}}
+		},
 		"too many commands": func(m *Manifest) {
 			for i := 0; i <= MaxCommands; i++ {
 				m.Contributes.Commands = append(m.Contributes.Commands, Command{ID: "demo.plugin.c" + string(rune('a'+i)), Title: "x"})
@@ -323,6 +326,36 @@ func TestValidatePackage(t *testing.T) {
 	inside.Executable = "bin/inside-link"
 	if err := ValidatePackage(inside, dir); err != nil {
 		t.Fatalf("inside symlink rejected: %v", err)
+	}
+}
+
+func TestFrontendPackageValidation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bin", "demo"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manifest{
+		APIVersion: APIVersion, ID: "demo.plugin", Name: "Demo", Version: "1.0.0", Executable: "bin/demo",
+		Contributes: Contributions{Frontends: []Frontend{{ID: "demo.plugin.console", Title: "Console", Entry: "web/app.js"}}},
+	}
+	if err := ValidatePackage(m, dir); err == nil {
+		t.Fatal("missing frontend module accepted")
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "web", "app.js"), []byte("export default class extends HTMLElement {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidatePackage(m, dir); err != nil {
+		t.Fatalf("valid frontend package rejected: %v", err)
+	}
+	m.Contributes.Frontends[0].Entry = "web/style.css"
+	if err := Validate(m); err == nil {
+		t.Fatal("non-module frontend entry accepted")
 	}
 }
 

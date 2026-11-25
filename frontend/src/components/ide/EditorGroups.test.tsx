@@ -84,6 +84,13 @@ describe("EditorGroups", () => {
     expect(screen.getByLabelText("Unsaved changes")).toBeInTheDocument();
   });
 
+  it("selects a tab on pointer down so touch taps switch immediately", () => {
+    const props = setup();
+    const tabs = screen.getAllByRole("tab");
+    fireEvent.pointerDown(tabs[0], { button: 0, clientX: 0, clientY: 0 });
+    expect(props.onSelectTab).toHaveBeenCalledWith("a.go");
+  });
+
   it("activates a group on pointer down", () => {
     const props = setup();
     fireEvent.pointerDown(document.querySelector('[data-editor-group="group-1"]')!);

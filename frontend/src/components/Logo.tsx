@@ -1,10 +1,45 @@
 export function Logo({ className = "h-7 w-7", alt = "" }: { className?: string; alt?: string }) {
   return (
-    <img
-      src="/logo.svg"
-      alt={alt}
-      draggable={false}
-      className={`shrink-0 select-none object-contain ${className}`}
-    />
+    <svg
+      viewBox="0 0 64 64"
+      className={`shrink-0 select-none ${className}`}
+      role={alt ? "img" : undefined}
+      aria-label={alt || undefined}
+      aria-hidden={alt ? undefined : true}
+      focusable="false"
+    >
+      <path d="M12 21 20 9 26 14 22 27 14 31Z" fill="#d94a4a" />
+      <path d="M52 21 44 9 38 14 42 27 50 31Z" fill="#d94a4a" />
+      <path d="M32 3 40 10 36 12 38 19 26 19 28 12 24 10Z" fill="#e86a6a" />
+      <path d="M32 7 35 13 32 20 29 13Z" fill="#c9d3dc" />
+      <circle cx="15" cy="27" r="7" fill="#6fd6ec" />
+      <circle cx="49" cy="27" r="7" fill="#6fd6ec" />
+      <circle cx="15" cy="27" r="3" fill="#3aa8c4" />
+      <circle cx="49" cy="27" r="3" fill="#3aa8c4" />
+      <ellipse cx="32" cy="36" rx="18" ry="17" fill="#7adcf0" />
+      <path d="M15 25 23 19 41 19 49 25 44 29 39 25 25 25 20 29Z" fill="#c9d3dc" />
+      <path d="M21 50 43 50 40 56 24 56Z" fill="#9aa7b4" />
+      <path d="M26 51 30 51 30 55 26 55Z" fill="#d94a4a" />
+      <path d="M34 51 38 51 38 55 34 55Z" fill="#d94a4a" />
+      <ellipse cx="25" cy="35" rx="6.5" ry="7.5" fill="#ffffff" />
+      <ellipse cx="39" cy="35" rx="6.5" ry="7.5" fill="#ffffff" />
+      <circle cx="26" cy="36" r="3" fill="#101820" />
+      <circle cx="40" cy="36" r="3" fill="#101820" />
+      <circle cx="27" cy="35" r="1" fill="#ffffff" />
+      <circle cx="41" cy="35" r="1" fill="#ffffff" />
+      <ellipse cx="32" cy="45" rx="10" ry="6" fill="#d9f6fc" />
+      <ellipse cx="32" cy="43" rx="2.6" ry="2" fill="#101820" />
+      <path
+        d="M32 45v2M32 47c-1.7 1.6-4 1.2-5 0M32 47c1.7 1.6 4 1.2 5 0"
+        fill="none"
+        stroke="#101820"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+      <path d="M9 34 14 31 16 38 12 44Z" fill="#9aa7b4" />
+      <path d="M55 34 50 31 48 38 52 44Z" fill="#9aa7b4" />
+      <path d="M7 45 12 42 14 48 11 53Z" fill="#d94a4a" />
+      <path d="M57 45 52 42 50 48 53 53Z" fill="#d94a4a" />
+    </svg>
   );
 }

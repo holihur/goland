@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { Puzzle } from "lucide-react";
+import { pluginIcon } from "./plugin-icons";
 import { toast } from "sonner";
 import { ApiError } from "./api";
 import type { PaletteAction } from "@/components/editor/CommandPalette";
@@ -30,12 +31,21 @@ export function usePluginContributions(workspaceId: string, activePath: string, 
     [runtime, activePath, cursorLine],
   );
 
-  const pluginPanels = runtime.enabled.flatMap((plugin) =>
-    (plugin.manifest?.contributes.panels ?? []).map((panel) => ({
-      view: `plugin:${plugin.id}:${panel.id}` as SideView,
-      title: panel.title,
-    })),
-  );
+  const pluginPanels = runtime.enabled.flatMap((plugin) => {
+    const fallbackIcon = plugin.manifest?.icon;
+    return [
+      ...(plugin.manifest?.contributes.panels ?? []).map((panel) => ({
+        view: `plugin:${plugin.id}:${panel.id}` as SideView,
+        title: panel.title,
+        icon: pluginIcon(panel.icon ?? fallbackIcon, "h-[18px] w-[18px]"),
+      })),
+      ...(plugin.manifest?.contributes.frontends ?? []).map((frontend) => ({
+        view: `plugin:${plugin.id}:${frontend.id}` as SideView,
+        title: frontend.title,
+        icon: pluginIcon(frontend.icon ?? fallbackIcon, "h-[18px] w-[18px]"),
+      })),
+    ];
+  });
 
   const pluginEditorActions = activePath
     ? runtime.enabled.flatMap((plugin) =>
@@ -53,7 +63,7 @@ export function usePluginContributions(workspaceId: string, activePath: string, 
         id: `plugin:${plugin.id}:${command.id}`,
         label: `${plugin.name}: ${command.title}`,
         description: command.description,
-        icon: <Puzzle className="h-3.5 w-3.5" />,
+        icon: pluginIcon(plugin.manifest?.icon, "h-3.5 w-3.5"),
         run: () => runPluginCommand(plugin, command.id),
       })),
     ),

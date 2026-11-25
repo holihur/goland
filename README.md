@@ -6,26 +6,30 @@ A self-hosted web IDE focused on **Go** and **TypeScript**. It combines a React 
 
 Implemented:
 
-- Multi-user admin-created accounts, HttpOnly sessions, CSRF, RBAC.
+- Multi-user admin-created accounts, HttpOnly sessions, CSRF, RBAC, TOTP MFA with forced enrollment, and optional OIDC single sign-on.
 - Local-directory workspaces and Git HTTPS clones.
 - Per-workspace unprivileged Unix UID; terminal, LSP, task and debug processes run as that UID.
-- File tree, CodeMirror tabs, editing/saving, conflict detection, search.
-- Window management: draggable sidebar/bottom-panel splitters, collapsible and maximizable panels, up to four editor groups with tabs dragged between groups, and per-user/workspace layout persistence.
-- Plugin system: admin-installed packages, per-workspace enable/config, JSON-RPC plugin hosts, declarative panels/status/settings, file/Git hooks, editor actions, and plugin-provided LSP/DAP servers routed through the backend.
-- gopls and typescript-language-server: diagnostics, completion, hover, definition, references, formatting.
-- xterm.js PTY terminal, Go/pnpm tasks with streamed output.
-- Delve DAP for Go and js-debug DAP for Node/TypeScript: breakpoints, call stack, variables.
+- File tree, CodeMirror tabs, editing/saving, conflict detection, filename/content search and workspace replace.
+- Syntax highlighting for the 50 most common languages, matched by extension or filename and loaded on demand, so grammars stay out of the initial bundle.
+- Autosaved drafts restore unsaved tabs after a reload or browser crash, with disk-conflict warnings on save.
+- Window management: draggable sidebar/bottom-panel splitters, collapsible and maximizable panels, up to four editor groups with tabs dragged between groups, per-user/workspace layout persistence, and a touch-friendly narrow-screen layout with overlay panels.
+- Plugin system: admin-installed packages, per-workspace enable/config, JSON-RPC plugin hosts, declarative panels/status/settings, file/Git hooks, editor actions, plugin-provided LSP/DAP servers, and native ES-module frontends rendered as Web Components with Shadow DOM.
+- gopls and typescript-language-server: diagnostics, completion, hover, definition, references, formatting, rename and code actions, with optional format-on-save.
+- xterm.js PTY terminal, Go/pnpm tasks with streamed output, and a Go/Vitest test explorer with per-test run results.
+- Delve DAP for Go and js-debug DAP for Node/TypeScript: clickable gutter breakpoints, call stack, variables.
 - Browser CDP attach, source maps, breakpoints, call stack, variables and session cleanup.
-- Git status/diff/stage/commit/branches/checkout/fast-forward pull/push.
+- Git status/diff/stage/commit/branches/checkout/fast-forward pull/push, side-by-side diffs, hunk staging and conflict resolution.
 - AES-256-GCM encrypted Git tokens.
+- Personal access tokens with scoped permissions and a stateless MCP endpoint for external agents.
 - Docker Compose production stack definitions.
+- Docker plugin (`examples/plugins/docker`): container/image inspection, Compose actions, logs, builds, status and a Web Component console.
 - Ten languages (including RTL), light/dark themes and a focused settings dialog.
 - Go and Vitest coverage gates, ESLint/typecheck, source file limit and GitHub Actions CI.
 
 Verification status:
 
 - Go tests: 76.3% statement coverage, `go vet` and `gofmt` clean.
-- Frontend: ESLint, typecheck, 156 Vitest tests at 94.0% line coverage.
+- Frontend: ESLint, typecheck, 203 Vitest tests at 94.0% line coverage.
 - Playwright is configured to run the full suite in the GitHub Actions `E2E` workflow and upload reports, traces, screenshots and logs. Local Playwright runs are optional because the browser debug suite is resource-heavy.
 - Repeat the Compose cold-start check after infrastructure changes.
 
@@ -158,6 +162,7 @@ See `.env.example`. Important variables:
 
 - [Architecture](docs/architecture.md)
 - [Security model](docs/security.md)
+- [Personal access tokens and MCP](docs/mcp.md)
 - [Operations](docs/operations.md)
 - [Quality gates](docs/quality-gates.md)
 

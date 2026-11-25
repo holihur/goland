@@ -199,3 +199,60 @@ func TestCreateSessionStub(t *testing.T) {
 		t.Fatal("stub should return an error")
 	}
 }
+
+func TestRequireMFASetupAndVerification(t *testing.T) {
+	st := testStore(t)
+	m := NewManager(st, time.Hour, false)
+	hash, _ := m.HashPassword("password-123")
+	user := &store.User{Email: "mfa@example.com", Name: "MFA", Role: "member", PasswordHash: hash}
+	if err := st.CreateUser(context.Background(), user); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/workspaces", nil)
+	session, _, err := m.CreateSessionForUser(context.Background(), user, req, false, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := m.Authenticate(m.RequireMFA(true)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})))
+	call := func() int {
+		req := httptest.NewRequest(http.MethodGet, "/api/workspaces", nil)
+		req.AddCookie(&http.Cookie{Name: SessionCookie, Value: session})
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr.Code
+	}
+	if code := call(); code != http.StatusForbidden {
+		t.Fatalf("forced setup code: %d", code)
+	}
+
+	// MFA setup endpoints stay reachable for the unverified session.
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/mfa/setup", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookie, Value: session})
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("mfa setup path blocked: %d", rr.Code)
+	}
+
+	if err := st.UpdateUserMFA(context.Background(), user.ID, true, "secret", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/workspaces", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookie, Value: session})
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("unverified MFA code: %d", rr.Code)
+	}
+	if err := st.UpdateSessionMFA(context.Background(), func() primitive.ObjectID {
+		sess, _ := st.FindSessionByHash(context.Background(), TokenHash(session))
+		return sess.ID
+	}(), true, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if code := call(); code != http.StatusNoContent {
+		t.Fatalf("verified MFA code: %d", code)
+	}
+}

@@ -42,9 +42,13 @@ function storage() {
  */
 export function useIdeLayout(userId: string, workspaceId: string) {
   const initialViewport = useRef(currentViewport());
-  const [layout, setLayout] = useState<LayoutState>(() =>
-    loadLayout(storage(), userId, workspaceId, initialViewport.current.height),
-  );
+  const [layout, setLayout] = useState<LayoutState>(() => {
+    const restored = loadLayout(storage(), userId, workspaceId, initialViewport.current.height);
+    if (isNarrowViewport(initialViewport.current.width)) {
+      return { ...restored, sidebarOpen: false, bottomOpen: false };
+    }
+    return restored;
+  });
   const [viewport, setViewport] = useState(initialViewport.current);
   const [restoredPaths] = useState(() => groupIds(layout).flatMap((id) => layout.groups[id]?.paths ?? []));
 
@@ -173,6 +177,14 @@ export function useIdeLayout(userId: string, workspaceId: string) {
   }, []);
 
   const compact = isNarrowViewport(viewport.width);
+
+  useEffect(() => {
+    if (!compact) return;
+    setLayout((current) =>
+      current.sidebarOpen || current.bottomOpen ? { ...current, sidebarOpen: false, bottomOpen: false } : current,
+    );
+  }, [compact]);
+
   // Keep the sidebar from squeezing the editor below a usable width.
   const sidebarMax = Math.max(180, Math.min(600, viewport.width - 260));
 

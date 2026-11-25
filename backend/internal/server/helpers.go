@@ -117,6 +117,8 @@ func mapFileError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "file is too large")
 	case errors.Is(err, files.ErrBinary):
 		writeError(w, http.StatusUnsupportedMediaType, "binary", "binary file")
+	case errors.Is(err, files.ErrInvalidQuery):
+		writeError(w, http.StatusBadRequest, "invalid_query", "invalid search query")
 	case errors.Is(err, fs.ErrNotExist):
 		writeError(w, http.StatusNotFound, "not_found", "file not found")
 	default:

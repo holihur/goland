@@ -95,6 +95,16 @@ before writing (chained content transforms), `preCommit` before Git commits, and
 after a successful fast-forward. Each call is audited with plugin, hook, path and duration.
 Plugin errors follow the manifest `failure` policy (`open` skips, `closed` blocks).
 
+### Frontend modules
+
+Plugins may declare `contributes.frontends` entries whose `entry` is a `.js`/`.mjs` ES module.
+The host imports the module with native `import()`, expects a default-exported custom element
+class, defines it, and mounts it in the sidebar after setting an `api` property. The API exposes
+workspace metadata, theme/language, command execution, notifications and file opening. Plugins
+should use Shadow DOM for style isolation. This is native page code, not an iframe; only
+administrator-installed plugins can contribute it, and they are trusted with the user's page
+privileges.
+
 ### Editor, language and debugger integration
 
 The frontend `usePlugins` hook loads workspace plugin state, subscribes to events and maps

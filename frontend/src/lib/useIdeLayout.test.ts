@@ -45,6 +45,14 @@ describe("useIdeLayout", () => {
     expect(restored.result.current.layout.bottomMaximized).toBe(true);
   });
 
+  it("starts narrow layouts with the sidebar and bottom dock closed", () => {
+    setViewport(390, 844);
+    const { result } = renderHook(() => useIdeLayout("u1", "w1"));
+    expect(result.current.compact).toBe(true);
+    expect(result.current.layout.sidebarOpen).toBe(false);
+    expect(result.current.layout.bottomOpen).toBe(false);
+  });
+
   it("isolates layouts per user and workspace", () => {
     const first = renderHook(() => useIdeLayout("u1", "w1"));
     act(() => first.result.current.setSidebarWidth(500));

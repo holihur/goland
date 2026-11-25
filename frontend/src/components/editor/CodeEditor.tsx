@@ -1,17 +1,16 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { go } from "@codemirror/lang-go";
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
-import { markdown } from "@codemirror/lang-markdown";
-import { Decoration, EditorView, WidgetType, hoverTooltip, keymap } from "@codemirror/view";
-import { RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
+import { EditorView, GutterMarker, gutter, hoverTooltip, keymap, lineNumbers } from "@codemirror/view";
+import { RangeSetBuilder, StateEffect, StateField, type Extension } from "@codemirror/state";
 import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
+import { foldEffect, foldGutter, foldable, foldedRanges, unfoldEffect } from "@codemirror/language";
 import { lintGutter, linter, setDiagnostics, type Diagnostic as CMDiagnostic } from "@codemirror/lint";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { toast } from "sonner";
 import type { Diagnostic } from "@/lib/types";
 import type { LSPClient, SourceLocation } from "@/lib/lsp";
+import { languageForPath } from "@/lib/languages";
+import { markdownNodes } from "@/lib/markdown";
 import { useTheme } from "@/lib/theme";
 
 const editorTheme = EditorView.theme({
@@ -31,16 +30,70 @@ const editorTheme = EditorView.theme({
     fontFamily: '"JetBrains Mono", "SFMono-Regular", Consolas, monospace',
     fontSize: "11px",
     lineHeight: "1.6",
-    color: "hsl(213 20% 88%)",
+    color: "hsl(var(--popover-foreground))",
+  },
+  ".cm-lsp-hover pre": {
+    margin: "6px 0",
+    overflowX: "auto",
+    borderRadius: "4px",
+    background: "hsl(var(--muted))",
+    padding: "6px 8px",
+  },
+  ".cm-lsp-hover code": {
+    borderRadius: "3px",
+    background: "hsl(var(--muted))",
+    padding: "0 3px",
+    fontFamily: '"JetBrains Mono", "SFMono-Regular", Consolas, monospace',
+  },
+  ".cm-lsp-hover pre code": { background: "transparent", padding: "0" },
+  ".cm-lsp-hover a": { color: "hsl(var(--primary))", textDecoration: "underline" },
+  ".cm-lsp-hover ul": { listStyle: "disc", paddingLeft: "18px" },
+  ".cm-lsp-hover ol": { listStyle: "decimal", paddingLeft: "18px" },
+  ".cm-lsp-hover .cm-md-heading": { margin: "4px 0", fontWeight: "600" },
+});
+
+function toggleFoldAtLine(view: EditorView, line: { from: number; to: number }) {
+  let foldedFrom = -1;
+  let foldedTo = -1;
+  foldedRanges(view.state).between(line.from, line.to, (from, to) => {
+    foldedFrom = from;
+    foldedTo = to;
+  });
+  if (foldedFrom >= 0) {
+    view.dispatch({ effects: unfoldEffect.of({ from: foldedFrom, to: foldedTo }) });
+    return;
+  }
+  const range = foldable(view.state, line.from, line.to);
+  if (range) view.dispatch({ effects: foldEffect.of(range) });
+}
+
+const foldingExtension = foldGutter({
+  domEventHandlers: {
+    // Fold toggling is handled on mousedown below so that a gutter re-render
+    // between mousedown and click cannot swallow the interaction.
+    click: () => true,
   },
 });
 
+function handleFoldMouseDown(event: MouseEvent, view: EditorView) {
+  if (event.button !== 0) return;
+  const gutter = view.dom.querySelector<HTMLElement>(".cm-foldGutter");
+  if (!gutter) return;
+  const rect = gutter.getBoundingClientRect();
+  if (event.clientX < rect.left || event.clientX > rect.right) return;
+  const line = view.lineBlockAtHeight(event.clientY - view.documentTop);
+  let folded = false;
+  foldedRanges(view.state).between(line.from, line.to, () => {
+    folded = true;
+  });
+  if (!folded && !foldable(view.state, line.from, line.to)) return;
+  event.preventDefault();
+  toggleFoldAtLine(view, line);
+}
+
 const breakpointEffect = StateEffect.define<number[]>();
 
-class BreakpointWidget extends WidgetType {
-  eq() {
-    return true;
-  }
+class BreakpointMarker extends GutterMarker {
   toDOM() {
     const dot = document.createElement("span");
     dot.className = "cm-breakpoint-dot";
@@ -48,6 +101,8 @@ class BreakpointWidget extends WidgetType {
     return dot;
   }
 }
+
+const breakpointMarker = new BreakpointMarker();
 
 const breakpointField = StateField.define<number[]>({
   create: () => [],
@@ -59,31 +114,30 @@ const breakpointField = StateField.define<number[]>({
   },
 });
 
-const breakpointDecorations = EditorView.decorations.compute([breakpointField], (state) => {
-  const builder = new RangeSetBuilder<Decoration>();
-  const lines = [...state.field(breakpointField)].sort((a, b) => a - b);
-  for (const lineNumber of lines) {
-    if (lineNumber < 1 || lineNumber > state.doc.lines) continue;
-    const line = state.doc.line(lineNumber);
-    builder.add(
-      line.from,
-      line.from,
-      Decoration.widget({ widget: new BreakpointWidget(), side: -1 }),
-    );
-  }
-  return builder.finish();
-});
-
-function languageExtension(path: string) {
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".go")) return go();
-  if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return javascript({ typescript: true, jsx: true });
-  if (lower.endsWith(".js") || lower.endsWith(".jsx") || lower.endsWith(".mjs")) {
-    return javascript({ jsx: true });
-  }
-  if (lower.endsWith(".json")) return json();
-  if (lower.endsWith(".md") || lower.endsWith(".mdx")) return markdown();
-  return [];
+function createBreakpointGutter(onToggle: (line: number) => void) {
+  return gutter({
+    class: "cm-breakpointGutter",
+    markers(view) {
+      const builder = new RangeSetBuilder<GutterMarker>();
+      const lines = [...view.state.field(breakpointField)].sort((a, b) => a - b);
+      for (const lineNumber of lines) {
+        if (lineNumber < 1 || lineNumber > view.state.doc.lines) continue;
+        const line = view.state.doc.line(lineNumber);
+        builder.add(line.from, line.from, breakpointMarker);
+      }
+      return builder.finish();
+    },
+    initialSpacer: () => breakpointMarker,
+    domEventHandlers: {
+      mousedown: (view, line, event) => {
+        if (!(event instanceof MouseEvent) || event.button !== 0) return false;
+        event.preventDefault();
+        onToggle(view.state.doc.lineAt(line.from).number);
+        return true;
+      },
+      click: () => true,
+    },
+  });
 }
 
 function positionAt(view: EditorView, pos: number) {
@@ -141,6 +195,7 @@ export function CodeEditor({
   onReferences,
   jumpTo,
   breakpoints = [],
+  onToggleBreakpoint,
   onCursorChange,
   initialCursorLine = 0,
   initialScrollTop = 0,
@@ -156,13 +211,15 @@ export function CodeEditor({
   onReferences?: (locations: SourceLocation[]) => void;
   jumpTo?: (SourceLocation & { nonce: number }) | null;
   breakpoints?: number[];
-  onCursorChange?: (line: number) => void;
+  onToggleBreakpoint?: (line: number) => void;
+  onCursorChange?: (line: number, column: number) => void;
   /** Restored when a tab is remounted after a group move or layout change. */
   initialCursorLine?: number;
   initialScrollTop?: number;
   onScrollChange?: (scrollTop: number) => void;
 }) {
   const { theme } = useTheme();
+  const [language, setLanguage] = useState<Extension>([]);
   const viewRef = useRef<EditorView | null>(null);
   const saveRef = useRef(onSave);
   const openLocationRef = useRef(onOpenLocation);
@@ -178,7 +235,14 @@ export function CodeEditor({
   scrollRef.current = onScrollChange;
   const initialCursorRef = useRef(initialCursorLine);
   const initialScrollRef = useRef(initialScrollTop);
+  const onToggleBreakpointRef = useRef(onToggleBreakpoint);
+  onToggleBreakpointRef.current = onToggleBreakpoint;
+  const breakpointGutterExtension = useMemo(
+    () => createBreakpointGutter((line) => onToggleBreakpointRef.current?.(line)),
+    [],
+  );
   const scrollHandlerRef = useRef<(() => void) | null>(null);
+  const foldMouseRef = useRef<{ dom: HTMLElement; handler: (event: MouseEvent) => void } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -186,21 +250,50 @@ export function CodeEditor({
       const handler = scrollHandlerRef.current;
       if (view && handler) view.scrollDOM.removeEventListener("scroll", handler);
       scrollHandlerRef.current = null;
+      const foldMouse = foldMouseRef.current;
+      if (foldMouse) foldMouse.dom.removeEventListener("mousedown", foldMouse.handler, true);
+      foldMouseRef.current = null;
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const description = languageForPath(path);
+    if (!description) {
+      setLanguage([]);
+      return;
+    }
+    setLanguage(description.support ?? []);
+    if (!description.support) {
+      void description
+        .load()
+        .then((support) => {
+          if (!cancelled) setLanguage(support);
+        })
+        .catch(() => {
+          if (!cancelled) setLanguage([]);
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [path]);
+
   const extensions = useMemo(() => {
     const list = [
-      languageExtension(path),
+      language,
+      breakpointGutterExtension,
+      lineNumbers(),
+      foldingExtension,
       editorTheme,
       linter(null),
       lintGutter(),
       breakpointField,
-      breakpointDecorations,
       EditorView.updateListener.of((update) => {
         if (!update.selectionSet && !update.docChanged) return;
-        const line = update.state.doc.lineAt(update.state.selection.main.head);
-        cursorRef.current?.(line.number);
+        const head = update.state.selection.main.head;
+        const line = update.state.doc.lineAt(head);
+        cursorRef.current?.(line.number, head - line.from + 1);
       }),
       keymap.of([
         {
@@ -255,7 +348,7 @@ export function CodeEditor({
             create: () => {
               const dom = document.createElement("div");
               dom.className = "cm-lsp-hover";
-              dom.textContent = text;
+              dom.append(...markdownNodes(text));
               return { dom };
             },
           };
@@ -339,7 +432,7 @@ export function CodeEditor({
       ]),
     );
     return list;
-  }, [path, lsp]);
+  }, [path, lsp, language]);
 
   useEffect(() => {
     if (!lsp) return;
@@ -405,6 +498,9 @@ export function CodeEditor({
         const handler = () => scrollRef.current?.(view.scrollDOM.scrollTop);
         scrollHandlerRef.current = handler;
         view.scrollDOM.addEventListener("scroll", handler, { passive: true });
+        const foldMouse = (event: MouseEvent) => handleFoldMouseDown(event, view);
+        foldMouseRef.current = { dom: view.dom, handler: foldMouse };
+        view.dom.addEventListener("mousedown", foldMouse, true);
         if (initialScrollRef.current > 0) {
           const scrollTop = initialScrollRef.current;
           requestAnimationFrame(() => {
@@ -417,8 +513,8 @@ export function CodeEditor({
         }
       }}
       basicSetup={{
-        lineNumbers: true,
-        foldGutter: true,
+        lineNumbers: false,
+        foldGutter: false,
         highlightActiveLine: true,
         highlightActiveLineGutter: true,
         bracketMatching: true,

@@ -18,22 +18,38 @@ var (
 )
 
 type User struct {
-	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	Email        string             `bson:"email" json:"email"`
-	Name         string             `bson:"name" json:"name"`
-	Role         string             `bson:"role" json:"role"`
-	PasswordHash string             `bson:"passwordHash" json:"-"`
-	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
-	UpdatedAt    time.Time          `bson:"updatedAt" json:"updatedAt"`
+	ID               primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	Email            string             `bson:"email" json:"email"`
+	Name             string             `bson:"name" json:"name"`
+	Role             string             `bson:"role" json:"role"`
+	PasswordHash     string             `bson:"passwordHash" json:"-"`
+	MFAEnabled       bool               `bson:"mfaEnabled,omitempty" json:"mfaEnabled"`
+	MFASecret        string             `bson:"mfaSecret,omitempty" json:"-"`
+	MFARecoveryCodes []string           `bson:"mfaRecoveryCodes,omitempty" json:"-"`
+	MFAEnrolledAt    *time.Time         `bson:"mfaEnrolledAt,omitempty" json:"mfaEnrolledAt,omitempty"`
+	CreatedAt        time.Time          `bson:"createdAt" json:"createdAt"`
+	UpdatedAt        time.Time          `bson:"updatedAt" json:"updatedAt"`
 }
 
 type Session struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty"`
-	UserID    primitive.ObjectID `bson:"userId"`
-	TokenHash string             `bson:"tokenHash"`
-	ExpiresAt time.Time          `bson:"expiresAt"`
-	CreatedAt time.Time          `bson:"createdAt"`
-	UserAgent string             `bson:"userAgent,omitempty"`
+	ID          primitive.ObjectID `bson:"_id,omitempty"`
+	UserID      primitive.ObjectID `bson:"userId"`
+	TokenHash   string             `bson:"tokenHash"`
+	ExpiresAt   time.Time          `bson:"expiresAt"`
+	CreatedAt   time.Time          `bson:"createdAt"`
+	UserAgent   string             `bson:"userAgent,omitempty"`
+	MFAVerified bool               `bson:"mfaVerified,omitempty"`
+}
+
+type APIToken struct {
+	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID     primitive.ObjectID `bson:"userId" json:"userId"`
+	Name       string             `bson:"name" json:"name"`
+	TokenHash  string             `bson:"tokenHash" json:"-"`
+	Scopes     []string           `bson:"scopes" json:"scopes"`
+	ExpiresAt  *time.Time         `bson:"expiresAt,omitempty" json:"expiresAt,omitempty"`
+	LastUsedAt *time.Time         `bson:"lastUsedAt,omitempty" json:"lastUsedAt,omitempty"`
+	CreatedAt  time.Time          `bson:"createdAt" json:"createdAt"`
 }
 
 type Workspace struct {
@@ -87,6 +103,7 @@ type Store struct {
 	Audit            *mongo.Collection
 	Plugins          *mongo.Collection
 	WorkspacePlugins *mongo.Collection
+	APITokens        *mongo.Collection
 }
 
 func Connect(ctx context.Context, uri, dbName string) (*Store, error) {
@@ -109,6 +126,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Store, error) {
 		Audit:            db.Collection("auditEvents"),
 		Plugins:          db.Collection("plugins"),
 		WorkspacePlugins: db.Collection("workspacePlugins"),
+		APITokens:        db.Collection("apiTokens"),
 	}
 	if err := s.ensureIndexes(ctx); err != nil {
 		_ = client.Disconnect(context.Background())
@@ -168,6 +186,13 @@ func (s *Store) ensureIndexes(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("workspace plugins index: %w", err)
+	}
+	_, err = s.APITokens.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "tokenHash", Value: 1}}, Options: options.Index().SetUnique(true).SetName("api_token_unique")},
+		{Keys: bson.D{{Key: "userId", Value: 1}, {Key: "createdAt", Value: -1}}, Options: options.Index().SetName("api_token_user")},
+	})
+	if err != nil {
+		return fmt.Errorf("api tokens index: %w", err)
 	}
 	return nil
 }
@@ -248,6 +273,69 @@ func (s *Store) DeleteSessionByHash(ctx context.Context, hash string) error {
 func (s *Store) DeleteSessionsForUser(ctx context.Context, userID primitive.ObjectID) error {
 	_, err := s.Sessions.DeleteMany(ctx, bson.M{"userId": userID})
 	return err
+}
+
+func (s *Store) UpdateUserMFA(ctx context.Context, userID primitive.ObjectID, enabled bool, secret string, recoveryCodes []string, enrolledAt *time.Time) error {
+	update := bson.M{"$set": bson.M{
+		"mfaEnabled": enabled, "mfaSecret": secret, "mfaRecoveryCodes": recoveryCodes,
+		"mfaEnrolledAt": enrolledAt, "updatedAt": time.Now().UTC(),
+	}}
+	_, err := s.Users.UpdateOne(ctx, bson.M{"_id": userID}, update)
+	return err
+}
+
+func (s *Store) UpdateSessionMFA(ctx context.Context, sessionID primitive.ObjectID, verified bool, expiresAt time.Time) error {
+	_, err := s.Sessions.UpdateOne(ctx, bson.M{"_id": sessionID}, bson.M{"$set": bson.M{
+		"mfaVerified": verified, "expiresAt": expiresAt,
+	}})
+	return err
+}
+
+func (s *Store) CreateAPIToken(ctx context.Context, token *APIToken) error {
+	if token.ID.IsZero() {
+		token.ID = primitive.NewObjectID()
+	}
+	token.CreatedAt = time.Now().UTC()
+	_, err := s.APITokens.InsertOne(ctx, token)
+	return err
+}
+
+func (s *Store) ListAPITokens(ctx context.Context, userID primitive.ObjectID) ([]APIToken, error) {
+	cur, err := s.APITokens.Find(ctx, bson.M{"userId": userID}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	var out []APIToken
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Store) FindAPITokenByHash(ctx context.Context, hash string) (*APIToken, error) {
+	var token APIToken
+	err := s.APITokens.FindOne(ctx, bson.M{"tokenHash": hash}).Decode(&token)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, ErrNotFound
+	}
+	return &token, err
+}
+
+func (s *Store) DeleteAPIToken(ctx context.Context, userID, id primitive.ObjectID) error {
+	result, err := s.APITokens.DeleteOne(ctx, bson.M{"_id": id, "userId": userID})
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) TouchAPIToken(ctx context.Context, id primitive.ObjectID) {
+	now := time.Now().UTC()
+	_, _ = s.APITokens.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{"lastUsedAt": now}})
 }
 
 func (s *Store) CreateWorkspace(ctx context.Context, w *Workspace) error {

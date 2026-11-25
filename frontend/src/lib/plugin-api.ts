@@ -35,6 +35,15 @@ export const pluginApi = {
   },
 };
 
+export function pluginFrontendAsset(workspaceId: string, pluginId: string, entry: string) {
+  const path = entry
+    .split("/")
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return `/api/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(pluginId)}/frontend/${path}`;
+}
+
 export function pluginSocket(workspaceId: string) {
   return `/api/ws/workspaces/${workspaceId}/plugins`;
 }

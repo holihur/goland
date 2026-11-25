@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,21 +14,32 @@ import (
 )
 
 type Config struct {
-	Addr           string
-	MongoURI       string
-	MongoDB        string
-	WorkspaceRoots []string
-	DataDir        string
-	SessionTTL     time.Duration
-	AdminEmail     string
-	AdminPassword  string
-	AdminName      string
-	MasterKey      []byte
-	SecureCookies  bool
-	WebDist        string
-	AllowedOrigins []string
-	Isolation      string
-	DevPermissions bool
+	Addr                     string
+	MongoURI                 string
+	MongoDB                  string
+	WorkspaceRoots           []string
+	DataDir                  string
+	SessionTTL               time.Duration
+	AdminEmail               string
+	AdminPassword            string
+	AdminName                string
+	MasterKey                []byte
+	SecureCookies            bool
+	MFARequired              bool
+	PublicURL                string
+	OIDCIssuer               string
+	OIDCClientID             string
+	OIDCClientSecret         string
+	OIDCRedirectURL          string
+	OIDCProviderName         string
+	OIDCScopes               []string
+	OIDCAutoCreate           bool
+	OIDCTrustMFA             bool
+	OIDCRequireVerifiedEmail bool
+	WebDist                  string
+	AllowedOrigins           []string
+	Isolation                string
+	DevPermissions           bool
 
 	GoPLS    string
 	TSServer string
@@ -39,25 +51,36 @@ type Config struct {
 
 func Load() (*Config, error) {
 	c := &Config{
-		Addr:           env("GOLAND_ADDR", "127.0.0.1:8788"),
-		MongoURI:       env("GOLAND_MONGO_URI", "mongodb://127.0.0.1:27019"),
-		MongoDB:        env("GOLAND_MONGO_DB", "goland"),
-		DataDir:        env("GOLAND_DATA_DIR", ".data"),
-		SessionTTL:     168 * time.Hour,
-		AdminEmail:     strings.ToLower(env("GOLAND_ADMIN_EMAIL", "admin@goland.local")),
-		AdminPassword:  env("GOLAND_ADMIN_PASSWORD", "admin123456"),
-		AdminName:      env("GOLAND_ADMIN_NAME", "Administrator"),
-		SecureCookies:  envBool("GOLAND_SECURE_COOKIES", false),
-		WebDist:        env("GOLAND_WEB_DIST", ""),
-		AllowedOrigins: splitCSV(env("GOLAND_ALLOWED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173")),
-		Isolation:      env("GOLAND_ISOLATION", "auto"),
-		DevPermissions: envBool("GOLAND_DEV_PERMISSIONS", false),
-		GoPLS:          env("GOLAND_GOPLS", "gopls"),
-		TSServer:       env("GOLAND_TSSERVER", "typescript-language-server"),
-		DLV:            env("GOLAND_DLV", "dlv"),
-		Node:           env("GOLAND_NODE", "node"),
-		JsDebug:        env("GOLAND_JS_DEBUG", ""),
-		Chrome:         env("GOLAND_CHROME", "chromium"),
+		Addr:                     env("GOLAND_ADDR", "127.0.0.1:8788"),
+		MongoURI:                 env("GOLAND_MONGO_URI", "mongodb://127.0.0.1:27019"),
+		MongoDB:                  env("GOLAND_MONGO_DB", "goland"),
+		DataDir:                  env("GOLAND_DATA_DIR", ".data"),
+		SessionTTL:               168 * time.Hour,
+		AdminEmail:               strings.ToLower(env("GOLAND_ADMIN_EMAIL", "admin@goland.local")),
+		AdminPassword:            env("GOLAND_ADMIN_PASSWORD", "admin123456"),
+		AdminName:                env("GOLAND_ADMIN_NAME", "Administrator"),
+		SecureCookies:            envBool("GOLAND_SECURE_COOKIES", false),
+		MFARequired:              envBool("GOLAND_MFA_REQUIRED", false),
+		PublicURL:                strings.TrimRight(env("GOLAND_PUBLIC_URL", ""), "/"),
+		OIDCIssuer:               strings.TrimRight(env("GOLAND_OIDC_ISSUER", ""), "/"),
+		OIDCClientID:             env("GOLAND_OIDC_CLIENT_ID", ""),
+		OIDCClientSecret:         env("GOLAND_OIDC_CLIENT_SECRET", ""),
+		OIDCRedirectURL:          strings.TrimSpace(env("GOLAND_OIDC_REDIRECT_URL", "")),
+		OIDCProviderName:         env("GOLAND_OIDC_NAME", "Single sign-on"),
+		OIDCScopes:               splitCSV(env("GOLAND_OIDC_SCOPES", "openid,profile,email")),
+		OIDCAutoCreate:           envBool("GOLAND_OIDC_AUTO_CREATE", false),
+		OIDCTrustMFA:             envBool("GOLAND_OIDC_TRUST_MFA", true),
+		OIDCRequireVerifiedEmail: envBool("GOLAND_OIDC_REQUIRE_VERIFIED_EMAIL", true),
+		WebDist:                  env("GOLAND_WEB_DIST", ""),
+		AllowedOrigins:           splitCSV(env("GOLAND_ALLOWED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173")),
+		Isolation:                env("GOLAND_ISOLATION", "auto"),
+		DevPermissions:           envBool("GOLAND_DEV_PERMISSIONS", false),
+		GoPLS:                    env("GOLAND_GOPLS", "gopls"),
+		TSServer:                 env("GOLAND_TSSERVER", "typescript-language-server"),
+		DLV:                      env("GOLAND_DLV", "dlv"),
+		Node:                     env("GOLAND_NODE", "node"),
+		JsDebug:                  env("GOLAND_JS_DEBUG", ""),
+		Chrome:                   env("GOLAND_CHROME", "chromium"),
 	}
 	if v := env("GOLAND_SESSION_TTL", ""); v != "" {
 		d, err := time.ParseDuration(v)
@@ -93,6 +116,28 @@ func Load() (*Config, error) {
 	if c.Chrome != "" && strings.Contains(c.Chrome, "/") {
 		if abs, err := filepath.Abs(c.Chrome); err == nil {
 			c.Chrome = abs
+		}
+	}
+
+	if c.OIDCIssuer != "" && c.OIDCClientID == "" {
+		return nil, errors.New("GOLAND_OIDC_CLIENT_ID is required when GOLAND_OIDC_ISSUER is set")
+	}
+	if c.OIDCIssuer != "" {
+		hasOpenID := false
+		for _, scope := range c.OIDCScopes {
+			if scope == "openid" {
+				hasOpenID = true
+				break
+			}
+		}
+		if !hasOpenID {
+			c.OIDCScopes = append([]string{"openid"}, c.OIDCScopes...)
+		}
+		if c.OIDCRedirectURL != "" {
+			parsed, err := url.Parse(c.OIDCRedirectURL)
+			if err != nil || !parsed.IsAbs() || parsed.Host == "" {
+				return nil, errors.New("GOLAND_OIDC_REDIRECT_URL must be an absolute URL")
+			}
 		}
 	}
 

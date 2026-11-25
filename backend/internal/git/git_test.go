@@ -237,3 +237,64 @@ func TestStatusRenamesAndDetached(t *testing.T) {
 		t.Fatalf("detached status: %#v", st)
 	}
 }
+
+func TestConflictResolveAndApplyPatch(t *testing.T) {
+	m, w, root := testManager(t)
+	initRepo(t, root)
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "base")
+	branch := runGit(t, root, "rev-parse", "--abbrev-ref", "HEAD")
+	runGit(t, root, "checkout", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("theirs\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "commit", "-am", "theirs")
+	runGit(t, root, "checkout", branch)
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("ours\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "commit", "-am", "ours")
+	cmd := exec.Command("git", "-C", root, "merge", "feature")
+	_ = cmd.Run()
+	conflict, err := m.Conflict(context.Background(), w, "file.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conflict.Ours != "ours" || conflict.Theirs != "theirs" || !strings.Contains(conflict.Working, "<<<<<<<") {
+		t.Fatalf("conflict: %#v", conflict)
+	}
+	if err := m.ResolveConflict(context.Background(), w, "file.txt", "theirs", ""); err != nil {
+		t.Fatal(err)
+	}
+	st, err := m.Status(context.Background(), w)
+	if err != nil || len(st.Files) != 1 || st.Files[0].Index != "M" {
+		t.Fatalf("resolved status: %#v %v", st, err)
+	}
+	if err := m.ResolveConflict(context.Background(), w, "file.txt", "bogus", ""); err == nil {
+		t.Fatal("invalid resolution should fail")
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("theirs\npatched\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	diff, err := m.Diff(context.Background(), w, "file.txt", false)
+	if err != nil || !strings.Contains(diff, "+patched") {
+		t.Fatalf("diff for patch: %q %v", diff, err)
+	}
+	if err := m.ApplyPatch(context.Background(), w, diff, false); err != nil {
+		t.Fatal(err)
+	}
+	staged, err := m.Diff(context.Background(), w, "file.txt", true)
+	if err != nil || !strings.Contains(staged, "+patched") {
+		t.Fatalf("staged patch: %q %v", staged, err)
+	}
+	if err := m.ApplyPatch(context.Background(), w, diff, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ApplyPatch(context.Background(), w, "--- a/../x\n+++ b/../x\n", false); err == nil {
+		t.Fatal("escaping patch should fail")
+	}
+}

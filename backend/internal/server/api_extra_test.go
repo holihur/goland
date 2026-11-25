@@ -39,6 +39,10 @@ type extraFixture struct {
 }
 
 func newExtraFixture(t *testing.T) *extraFixture {
+	return newExtraFixtureWithConfig(t, nil)
+}
+
+func newExtraFixtureWithConfig(t *testing.T, mutate func(*config.Config)) *extraFixture {
 	t.Helper()
 	uri := os.Getenv("GOLAND_TEST_MONGO_URI")
 	if uri == "" {
@@ -63,6 +67,9 @@ func newExtraFixture(t *testing.T) *extraFixture {
 		AdminName: "Admin", MasterKey: bytes.Repeat([]byte{2}, 32), Isolation: "none",
 		GoPLS: "gopls", TSServer: "typescript-language-server", DLV: "dlv", Node: "node",
 		Chrome: "",
+	}
+	if mutate != nil {
+		mutate(cfg)
 	}
 	if err := server.BootstrapAdmin(context.Background(), st, cfg); err != nil {
 		t.Fatal(err)

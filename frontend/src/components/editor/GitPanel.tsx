@@ -5,6 +5,7 @@ import {
   Check,
   GitBranch,
   GitCommitHorizontal,
+  GitMerge,
   History,
   Loader2,
   Plus,
@@ -14,14 +15,24 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
-import type { GitBranch as Branch, GitStatus } from "@/lib/types";
+import type { GitBranch as Branch, GitConflict, GitStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PromptDialog, type PromptState } from "@/components/PromptDialog";
+import { GitDiff } from "@/components/editor/GitDiff";
+
+function isConflict(index: string, worktree: string) {
+  return (
+    (index === "U" && worktree === "U") ||
+    (index === "A" && worktree === "A") ||
+    (index === "D" && worktree === "D")
+  );
+}
 
 function statusLabel(index: string, worktree: string) {
+  if (isConflict(index, worktree)) return { text: "!", color: "text-red-400" };
   if (index === "A" || worktree === "A") return { text: "A", color: "text-emerald-400" };
   if (index === "D" || worktree === "D") return { text: "D", color: "text-red-400" };
   if (index === "R" || worktree === "R") return { text: "R", color: "text-amber-300" };
@@ -44,7 +55,9 @@ export function GitPanel({
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [diff, setDiff] = useState("");
+  const [diffCached, setDiffCached] = useState(false);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [conflict, setConflict] = useState<GitConflict | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState("");
@@ -60,8 +73,8 @@ export function GitPanel({
         api.gitStatus(workspaceId),
         api.gitBranches(workspaceId),
       ]);
-      setStatus(nextStatus);
-      setBranches(nextBranches.branches);
+      setStatus({ ...nextStatus, files: nextStatus.files ?? [] });
+      setBranches(nextBranches.branches ?? []);
       setError("");
     } catch (err) {
       setStatus(null);
@@ -78,14 +91,47 @@ export function GitPanel({
 
   const openDiff = async (path: string, cached = false) => {
     setSelected(path);
+    setDiffCached(cached);
     setDiffLoading(true);
+    const file = status?.files.find((item) => item.path === path);
+    const conflicted = !!file && isConflict(file.index, file.worktree);
     try {
       const result = await api.gitDiff(workspaceId, path, cached);
-      setDiff(result.diff || (cached ? "No staged changes for this file." : "No text diff for this file."));
+      setDiff(result.diff || "");
+      if (conflicted) {
+        setConflict(await api.gitConflict(workspaceId, path));
+      } else {
+        setConflict(null);
+      }
     } catch (err) {
       setDiff(err instanceof ApiError ? err.message : "Could not load diff");
+      setConflict(null);
     } finally {
       setDiffLoading(false);
+    }
+  };
+
+  const resolveConflict = async (resolution: "ours" | "theirs" | "both" | "mark") => {
+    if (!selected) return;
+    await action("resolve", () => api.gitResolve(workspaceId, selected, resolution), "Conflict resolved");
+    setConflict(null);
+    setSelected("");
+    setDiff("");
+  };
+
+  const applyPatch = async (patch: string, reverse: boolean) => {
+    setBusy("hunk");
+    try {
+      await api.gitApplyPatch(workspaceId, patch, reverse);
+      toast.success(reverse ? "Hunk unstaged" : "Hunk staged");
+      await load();
+      onWorkspaceChanged();
+      if (selected) await openDiff(selected, diffCached);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not apply hunk");
+      throw err;
+    } finally {
+      setBusy("");
     }
   };
 
@@ -130,6 +176,8 @@ export function GitPanel({
       },
     });
   };
+
+  const files = status?.files ?? [];
 
   if (error) {
     return (
@@ -216,12 +264,12 @@ export function GitPanel({
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-1.5">
-          {status?.files.length === 0 && (
+          {files.length === 0 && (
             <div className="flex items-center gap-2 px-2 py-3 text-[11px] text-muted-foreground">
               <Check className="h-3.5 w-3.5 text-emerald-400" /> Working tree clean
             </div>
           )}
-          {status?.files.map((file) => {
+          {files.map((file) => {
             const label = statusLabel(file.index, file.worktree);
             return (
               <div
@@ -273,9 +321,46 @@ export function GitPanel({
                 </button>
               </div>
             </div>
-            <pre className="max-h-64 overflow-auto border-t bg-background/60 p-2 font-code text-[10px] leading-4 text-muted-foreground">
-              {diffLoading ? "Loading diff…" : diff}
-            </pre>
+            {conflict && (
+              <>
+                <div className="flex flex-wrap gap-1 border-t p-1.5">
+                  <Button size="sm" className="h-6 text-[10px]" onClick={() => void resolveConflict("ours")}>
+                    <GitMerge className="h-3 w-3" /> Ours
+                  </Button>
+                  <Button size="sm" variant="secondary" className="h-6 text-[10px]" onClick={() => void resolveConflict("theirs")}>
+                    Theirs
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => void resolveConflict("both")}>
+                    Both
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => void resolveConflict("mark")}>
+                    Mark resolved
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => onOpenFile(selected)}>
+                    Edit
+                  </Button>
+                </div>
+                <div className="grid max-h-40 grid-cols-2 divide-x overflow-auto border-t bg-background/60 font-code text-[10px] leading-4">
+                  <div className="min-w-0 p-1.5">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-red-400">Ours</div>
+                    <pre className="whitespace-pre-wrap break-all">{conflict.ours || "(empty)"}</pre>
+                  </div>
+                  <div className="min-w-0 p-1.5">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-emerald-400">Theirs</div>
+                    <pre className="whitespace-pre-wrap break-all">{conflict.theirs || "(empty)"}</pre>
+                  </div>
+                </div>
+              </>
+            )}
+            {diffLoading ? (
+              <div className="border-t p-2 font-code text-[10px] leading-4 text-muted-foreground">Loading diff…</div>
+            ) : diff.trim() ? (
+              <GitDiff diff={diff} cached={diffCached} onApplyPatch={applyPatch} />
+            ) : (
+              <div className="border-t p-2 font-code text-[10px] leading-4 text-muted-foreground">
+                No {diffCached ? "staged" : "working"} changes for this file.
+              </div>
+            )}
           </div>
         )}
 

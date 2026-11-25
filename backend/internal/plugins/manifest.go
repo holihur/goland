@@ -31,6 +31,7 @@ const (
 	MaxEditorActions = 50
 	MaxLanguages     = 20
 	MaxDebuggers     = 10
+	MaxFrontends     = 20
 	MaxFields        = 50
 	MaxOptions       = 100
 )
@@ -50,6 +51,7 @@ type Manifest struct {
 	Version     string        `json:"version"`
 	Description string        `json:"description,omitempty"`
 	Homepage    string        `json:"homepage,omitempty"`
+	Icon        string        `json:"icon,omitempty"`
 	Executable  string        `json:"executable"`
 	Contributes Contributions `json:"contributes"`
 }
@@ -64,6 +66,7 @@ type Contributions struct {
 	EditorActions []EditorAction `json:"editorActions,omitempty"`
 	Languages     []Language     `json:"languages,omitempty"`
 	Debuggers     []Debugger     `json:"debuggers,omitempty"`
+	Frontends     []Frontend     `json:"frontends,omitempty"`
 }
 
 // Command is an executable action contributed to the command palette.
@@ -172,6 +175,16 @@ type Debugger struct {
 	Server Server `json:"server"`
 }
 
+// Frontend is an ES module panel shipped with the plugin package. The module
+// exports mount(container, api) and may return a cleanup function.
+type Frontend struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Icon        string `json:"icon,omitempty"`
+	Entry       string `json:"entry"`
+	Description string `json:"description,omitempty"`
+}
+
 // HookKind identifies a lifecycle hook for failure-mode defaults.
 type HookKind string
 
@@ -257,6 +270,9 @@ func Validate(m *Manifest) error {
 	if !semverPattern.MatchString(m.Version) {
 		return fmt.Errorf("version %q is not valid semver", m.Version)
 	}
+	if m.Icon != "" && (!idPattern.MatchString(m.Icon) || len(m.Icon) > 40) {
+		return errors.New("icon must be a lowercase identifier such as container or sparkles")
+	}
 	if err := validateRelativePath(m.Executable); err != nil {
 		return fmt.Errorf("executable: %w", err)
 	}
@@ -282,6 +298,9 @@ func Validate(m *Manifest) error {
 	}
 	if len(c.Debuggers) > MaxDebuggers {
 		return fmt.Errorf("too many debuggers (max %d)", MaxDebuggers)
+	}
+	if len(c.Frontends) > MaxFrontends {
+		return fmt.Errorf("too many frontends (max %d)", MaxFrontends)
 	}
 
 	commands := make(map[string]bool, len(c.Commands))
@@ -440,6 +459,27 @@ func Validate(m *Manifest) error {
 		}
 		kinds[dbg.Kind] = true
 	}
+
+	frontends := make(map[string]bool, len(c.Frontends))
+	for i := range c.Frontends {
+		view := &c.Frontends[i]
+		if err := validateContributionID(m.ID, view.ID, "frontend"); err != nil {
+			return err
+		}
+		if frontends[view.ID] {
+			return fmt.Errorf("duplicate frontend id %q", view.ID)
+		}
+		if strings.TrimSpace(view.Title) == "" || len(view.Title) > 120 {
+			return fmt.Errorf("frontend %q title is required", view.ID)
+		}
+		if err := validateRelativePath(view.Entry); err != nil {
+			return fmt.Errorf("frontend %q entry: %w", view.ID, err)
+		}
+		if !strings.HasSuffix(strings.ToLower(view.Entry), ".js") && !strings.HasSuffix(strings.ToLower(view.Entry), ".mjs") {
+			return fmt.Errorf("frontend %q entry must be a .js or .mjs module", view.ID)
+		}
+		frontends[view.ID] = true
+	}
 	return nil
 }
 
@@ -468,6 +508,11 @@ func ValidatePackage(m *Manifest, dir string) error {
 	for _, dbg := range m.Contributes.Debuggers {
 		if err := checkPackageFile(root, dbg.Server.Command); err != nil {
 			return fmt.Errorf("debugger %q server: %w", dbg.Kind, err)
+		}
+	}
+	for _, view := range m.Contributes.Frontends {
+		if err := checkPackageFile(root, view.Entry); err != nil {
+			return fmt.Errorf("frontend %q entry: %w", view.ID, err)
 		}
 	}
 	return nil

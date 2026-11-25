@@ -221,10 +221,10 @@ export class DAPClient {
     return launchPromise;
   }
 
-  setBreakpoints(path: string, lines: number[]) {
+  setBreakpoints(path: string, lines: number[], conditions: Record<number, string> = {}) {
     return this.request("setBreakpoints", {
       source: { path, name: path.split("/").pop() },
-      breakpoints: lines.map((line) => ({ line })),
+      breakpoints: lines.map((line) => ({ line, ...(conditions[line] ? { condition: conditions[line] } : {}) })),
       lines,
       sourceModified: false,
     }, 180000);

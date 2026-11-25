@@ -26,8 +26,7 @@ export default defineConfig({
           groups: [
             { name: "react", test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
             { name: "lezer", test: /node_modules[\\/]@lezer[\\/]/, priority: 20 },
-            { name: "codemirror-lang", test: /node_modules[\\/]@codemirror[\\/]lang-/, priority: 10 },
-            { name: "codemirror-core", test: /node_modules[\\/]@codemirror[\\/]/ },
+            { name: "codemirror-core", test: /node_modules[\\/]@codemirror[\\/](?!lang-|legacy-modes)/ },
             { name: "codemirror-react", test: /node_modules[\\/]@uiw[\\/]/ },
             { name: "xterm", test: /node_modules[\\/]@xterm[\\/]/ },
           ],

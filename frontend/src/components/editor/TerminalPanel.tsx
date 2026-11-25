@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Circle, Loader2, RotateCw, Trash2 } from "lucide-react";
+import { Circle, Loader2, Plus, RotateCw, Trash2, X } from "lucide-react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 
-export function TerminalPanel({
+function TerminalInstance({
   workspaceId,
   visible,
 }: {
@@ -220,6 +220,83 @@ export function TerminalPanel({
         </div>
       </div>
       <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden" />
+    </div>
+  );
+}
+
+interface TerminalTab {
+  id: string;
+  label: string;
+}
+
+function newID() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `terminal-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export function TerminalPanel({ workspaceId, visible }: { workspaceId: string; visible: boolean }) {
+  const [terminals, setTerminals] = useState<TerminalTab[]>(() => [{ id: newID(), label: "Terminal 1" }]);
+  const [active, setActive] = useState(() => terminals[0]?.id ?? "");
+  const nextName = useRef(2);
+
+  const add = () => {
+    const label = `Terminal ${nextName.current++}`;
+    const tab = { id: newID(), label };
+    setTerminals((current) => [...current, tab]);
+    setActive(tab.id);
+  };
+
+  const close = (id: string) => {
+    setTerminals((current) => {
+      if (current.length <= 1) return current;
+      const index = current.findIndex((item) => item.id === id);
+      const next = current.filter((item) => item.id !== id);
+      if (id === active) setActive(next[Math.max(0, index - 1)]?.id ?? next[0]?.id ?? "");
+      return next;
+    });
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-7 shrink-0 items-center gap-0.5 border-b bg-panel/50 px-1">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+          {terminals.map((terminal) => (
+            <button
+              key={terminal.id}
+              className={cn(
+                "group flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[10px]",
+                terminal.id === active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50",
+              )}
+              onClick={() => setActive(terminal.id)}
+            >
+              <span className="truncate">{terminal.label}</span>
+              {terminals.length > 1 && (
+                <span
+                  role="button"
+                  aria-label={`Close ${terminal.label}`}
+                  className="rounded p-0.5 opacity-0 hover:bg-background group-hover:opacity-100"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    close(terminal.id);
+                  }}
+                >
+                  <X className="h-2.5 w-2.5" />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <Button variant="ghost" size="icon-sm" title="New terminal" onClick={add}>
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1">
+        {terminals.map((terminal) => (
+          <div key={terminal.id} className={terminal.id === active && visible ? "h-full" : "hidden"}>
+            <TerminalInstance workspaceId={workspaceId} visible={visible && terminal.id === active} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

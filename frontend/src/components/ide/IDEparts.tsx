@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bug, FileCode2, Files, GitBranch, Keyboard, Puzzle, RotateCw, Search, Settings2, TerminalSquare } from "lucide-react";
+import { Bug, FileCode2, Files, GitBranch, Keyboard, ListTree, Puzzle, RotateCw, Search, Settings2, TerminalSquare } from "lucide-react";
 import type { Workspace } from "@/lib/types";
 import type { SourceLocation } from "@/lib/lsp";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ export type { SideView };
 export interface PluginPanelEntry {
   view: SideView;
   title: string;
+  icon?: ReactNode;
 }
 
 export function ActivityBar({
@@ -31,11 +32,12 @@ export function ActivityBar({
   const items: Array<{ id: SideView; icon: ReactNode; label: string }> = [
     { id: "explorer", icon: <Files className="h-[18px] w-[18px]" />, label: "Explorer (⌘B)" },
     { id: "search", icon: <Search className="h-[18px] w-[18px]" />, label: "Search" },
+    { id: "outline", icon: <ListTree className="h-[18px] w-[18px]" />, label: "Outline" },
     { id: "git", icon: <GitBranch className="h-[18px] w-[18px]" />, label: "Source control" },
     { id: "debug", icon: <Bug className="h-[18px] w-[18px]" />, label: "Run & debug (F5)" },
     ...pluginPanels.map((panel) => ({
       id: panel.view,
-      icon: <Puzzle className="h-[18px] w-[18px]" />,
+      icon: panel.icon ?? <Puzzle className="h-[18px] w-[18px]" />,
       label: panel.title,
     })),
   ];

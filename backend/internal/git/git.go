@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -231,7 +232,7 @@ func (m *Manager) Branches(ctx context.Context, w *store.Workspace) ([]Branch, e
 	}
 	current, _ := m.run(ctx, w, root, "rev-parse", "--abbrev-ref", "HEAD")
 	current = strings.TrimSpace(current)
-	var branches []Branch
+	branches := []Branch{}
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -340,4 +341,131 @@ func gitEnv(base []string, token string) []string {
 		)
 	}
 	return env
+}
+
+type Conflict struct {
+	Path    string `json:"path"`
+	Base    string `json:"base"`
+	Ours    string `json:"ours"`
+	Theirs  string `json:"theirs"`
+	Working string `json:"working"`
+}
+
+func (m *Manager) Conflict(ctx context.Context, w *store.Workspace, rel string) (*Conflict, error) {
+	root, err := m.root(w)
+	if err != nil {
+		return nil, err
+	}
+	p, err := safePath(rel)
+	if err != nil {
+		return nil, err
+	}
+	out := &Conflict{Path: p}
+	if text, err := m.run(ctx, w, root, "show", ":1:"+p); err == nil {
+		out.Base = text
+	}
+	if text, err := m.run(ctx, w, root, "show", ":2:"+p); err == nil {
+		out.Ours = text
+	}
+	if text, err := m.run(ctx, w, root, "show", ":3:"+p); err == nil {
+		out.Theirs = text
+	}
+	if data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p))); err == nil {
+		out.Working = string(data)
+	}
+	return out, nil
+}
+
+func (m *Manager) ResolveConflict(ctx context.Context, w *store.Workspace, rel, resolution, content string) error {
+	root, err := m.root(w)
+	if err != nil {
+		return err
+	}
+	p, err := safePath(rel)
+	if err != nil {
+		return err
+	}
+	switch resolution {
+	case "ours", "theirs":
+		if _, err := m.run(ctx, w, root, "checkout", "--"+resolution, "--", p); err != nil {
+			return err
+		}
+	case "both":
+		ours, _ := m.run(ctx, w, root, "show", ":2:"+p)
+		theirs, _ := m.run(ctx, w, root, "show", ":3:"+p)
+		content = strings.TrimRight(ours, "\n") + "\n" + strings.TrimRight(theirs, "\n") + "\n"
+		if err := writeWorkspaceFile(root, p, content); err != nil {
+			return err
+		}
+	case "content":
+		if len(content) > 5<<20 {
+			return errors.New("content is too large")
+		}
+		if err := writeWorkspaceFile(root, p, content); err != nil {
+			return err
+		}
+	case "mark":
+	default:
+		return errors.New("invalid resolution")
+	}
+	_, err = m.run(ctx, w, root, "add", "--", p)
+	return err
+}
+
+func writeWorkspaceFile(root, rel, content string) error {
+	full := filepath.Join(root, filepath.FromSlash(rel))
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(full); err == nil {
+		mode = info.Mode().Perm()
+	}
+	return os.WriteFile(full, []byte(content), mode)
+}
+
+func (m *Manager) ApplyPatch(ctx context.Context, w *store.Workspace, patch string, reverse bool) error {
+	root, err := m.root(w)
+	if err != nil {
+		return err
+	}
+	patch = strings.TrimSpace(patch)
+	if patch == "" || len(patch) > 2<<20 {
+		return errors.New("invalid patch")
+	}
+	for _, line := range strings.Split(patch, "\n") {
+		if strings.HasPrefix(line, "--- ") || strings.HasPrefix(line, "+++ ") {
+			path := strings.TrimPrefix(strings.TrimPrefix(line, "--- "), "+++ ")
+			path = strings.TrimPrefix(path, "a/")
+			path = strings.TrimPrefix(path, "b/")
+			fields := strings.Fields(path)
+			if len(fields) == 0 {
+				return errors.New("invalid patch")
+			}
+			if _, err := safePath(fields[0]); err != nil {
+				return err
+			}
+		}
+	}
+	args := []string{"apply", "--cached", "--whitespace=nowarn"}
+	if reverse {
+		args = append(args, "--reverse")
+	}
+	return m.runInput(ctx, w, root, patch+"\n", args...)
+}
+
+func (m *Manager) runInput(ctx context.Context, w *store.Workspace, root, input string, args ...string) error {
+	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	identity, err := m.workspaces.Identity(ctx, w)
+	if err != nil {
+		return fmt.Errorf("prepare workspace user: %w", err)
+	}
+	cmd := exec.CommandContext(runCtx, "git", append([]string{"-C", root}, args...)...)
+	cmd.Stdin = strings.NewReader(input)
+	identity.Apply(cmd)
+	token, _ := m.workspaces.Token(w)
+	cmd.Env = gitEnv(identity.Env(root), token)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %s: %s", args[0], strings.TrimSpace(string(out)))
+	}
+	return nil
 }

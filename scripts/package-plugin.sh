@@ -17,7 +17,7 @@ if [ ! -f "$dir/manifest.json" ]; then
 fi
 
 if command -v zip >/dev/null 2>&1; then
-  (cd "$dir" && zip -qr "$out" manifest.json bin)
+  (cd "$dir" && zip -qr "$out" manifest.json bin web 2>/dev/null || zip -qr "$out" manifest.json bin)
 else
   python3 - "$dir" "$out" <<'PY'
 import os
@@ -30,7 +30,7 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
         for name in files:
             full = os.path.join(current, name)
             rel = os.path.relpath(full, root)
-            if rel == "manifest.json" or rel.startswith("bin" + os.sep):
+            if rel == "manifest.json" or rel.startswith("bin" + os.sep) or rel.startswith("web" + os.sep):
                 archive.write(full, rel.replace(os.sep, "/"))
 PY
 fi

@@ -1,0 +1,172 @@
+{
+  "apiVersion": 1,
+  "id": "openapi",
+  "name": "OpenAPI",
+  "version": "0.1.0",
+  "description": "Inspect OpenAPI/Swagger specs, list endpoints, validate documents and send test requests.",
+  "executable": "bin/openapi",
+  "contributes": {
+    "commands": [
+      {
+        "id": "openapi.overview",
+        "title": "OpenAPI: Spec overview"
+      },
+      {
+        "id": "openapi.endpoints",
+        "title": "OpenAPI: List endpoints"
+      },
+      {
+        "id": "openapi.validate",
+        "title": "OpenAPI: Validate spec"
+      },
+      {
+        "id": "openapi.request",
+        "title": "OpenAPI: Send request"
+      },
+      {
+        "id": "openapi.panel.run",
+        "title": "OpenAPI: Run panel action"
+      }
+    ],
+    "panels": [
+      {
+        "id": "openapi.panel",
+        "title": "OpenAPI",
+        "icon": "braces",
+        "fields": [
+          {
+            "key": "spec",
+            "type": "text",
+            "label": "Spec file",
+            "placeholder": "openapi.yaml"
+          },
+          {
+            "key": "baseUrl",
+            "type": "text",
+            "label": "Base URL",
+            "placeholder": "https://api.example.com"
+          },
+          {
+            "key": "method",
+            "type": "select",
+            "label": "Method",
+            "options": [
+              {
+                "label": "GET",
+                "value": "GET"
+              },
+              {
+                "label": "POST",
+                "value": "POST"
+              },
+              {
+                "label": "PUT",
+                "value": "PUT"
+              },
+              {
+                "label": "PATCH",
+                "value": "PATCH"
+              },
+              {
+                "label": "DELETE",
+                "value": "DELETE"
+              }
+            ],
+            "default": "GET"
+          },
+          {
+            "key": "path",
+            "type": "text",
+            "label": "Path",
+            "placeholder": "/pets"
+          },
+          {
+            "key": "body",
+            "type": "textarea",
+            "label": "JSON body"
+          }
+        ],
+        "actions": [
+          {
+            "id": "overview",
+            "label": "Overview",
+            "command": "openapi.panel.run",
+            "args": {
+              "action": "overview"
+            }
+          },
+          {
+            "id": "endpoints",
+            "label": "Endpoints",
+            "command": "openapi.panel.run",
+            "args": {
+              "action": "endpoints"
+            }
+          },
+          {
+            "id": "validate",
+            "label": "Validate",
+            "command": "openapi.panel.run",
+            "args": {
+              "action": "validate"
+            }
+          },
+          {
+            "id": "send",
+            "label": "Send request",
+            "command": "openapi.panel.run",
+            "args": {
+              "action": "request"
+            }
+          }
+        ]
+      }
+    ],
+    "frontends": [
+      {
+        "id": "openapi.console",
+        "title": "OpenAPI console",
+        "icon": "braces",
+        "entry": "web/app.js",
+        "description": "Web Component console for OpenAPI inspection and request testing."
+      }
+    ],
+    "status": [
+      {
+        "id": "openapi.status",
+        "text": "OpenAPI",
+        "tooltip": "OpenAPI plugin status",
+        "command": "openapi.endpoints"
+      }
+    ],
+    "settings": [
+      {
+        "id": "openapi.settings",
+        "title": "OpenAPI",
+        "fields": [
+          {
+            "key": "spec",
+            "type": "text",
+            "label": "Default spec file",
+            "placeholder": "openapi.yaml"
+          },
+          {
+            "key": "baseUrl",
+            "type": "text",
+            "label": "Default base URL",
+            "placeholder": "https://api.example.com"
+          },
+          {
+            "key": "timeout",
+            "type": "number",
+            "label": "Request timeout (seconds)",
+            "default": 20,
+            "min": 2,
+            "max": 55
+          }
+        ]
+      }
+    ]
+  },
+  "icon": "braces"
+}

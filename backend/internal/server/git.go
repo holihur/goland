@@ -224,3 +224,66 @@ func (s *Server) gitError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "git_failed", err.Error())
 	}
 }
+
+func (s *Server) gitConflict(w http.ResponseWriter, r *http.Request) {
+	ws, ok := s.workspaceFor(w, r)
+	if !ok {
+		return
+	}
+	rel := cleanQueryPath(r)
+	if rel == "" {
+		writeError(w, http.StatusBadRequest, "invalid_path", "path is required")
+		return
+	}
+	conflict, err := s.git.Conflict(r.Context(), ws, rel)
+	if err != nil {
+		s.gitError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, conflict)
+}
+
+func (s *Server) gitResolve(w http.ResponseWriter, r *http.Request) {
+	ws, ok := s.workspaceFor(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Path       string `json:"path"`
+		Resolution string `json:"resolution"`
+		Content    string `json:"content"`
+	}
+	if !decodeJSON(w, r, &body, 6<<20) {
+		return
+	}
+	if body.Path == "" {
+		writeError(w, http.StatusBadRequest, "invalid_path", "path is required")
+		return
+	}
+	if err := s.git.ResolveConflict(r.Context(), ws, body.Path, body.Resolution, body.Content); err != nil {
+		s.gitError(w, err)
+		return
+	}
+	s.audit(r, "git.resolve", ws.ID.Hex(), body.Path+":"+body.Resolution)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) gitApplyPatch(w http.ResponseWriter, r *http.Request) {
+	ws, ok := s.workspaceFor(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Patch   string `json:"patch"`
+		Reverse bool   `json:"reverse"`
+	}
+	if !decodeJSON(w, r, &body, 3<<20) {
+		return
+	}
+	if err := s.git.ApplyPatch(r.Context(), ws, body.Patch, body.Reverse); err != nil {
+		s.gitError(w, err)
+		return
+	}
+	s.audit(r, "git.patch", ws.ID.Hex(), "")
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -1,0 +1,176 @@
+{
+  "apiVersion": 1,
+  "id": "ssh",
+  "name": "SSH",
+  "version": "0.1.0",
+  "description": "Run non-interactive SSH commands and inspect SSH config hosts from the IDE.",
+  "executable": "bin/ssh",
+  "contributes": {
+    "commands": [
+      {
+        "id": "ssh.exec",
+        "title": "SSH: Run command"
+      },
+      {
+        "id": "ssh.test",
+        "title": "SSH: Test connection"
+      },
+      {
+        "id": "ssh.hosts",
+        "title": "SSH: List config hosts"
+      },
+      {
+        "id": "ssh.panel.run",
+        "title": "SSH: Run panel action"
+      }
+    ],
+    "panels": [
+      {
+        "id": "ssh.panel",
+        "title": "SSH",
+        "icon": "terminal",
+        "fields": [
+          {
+            "key": "host",
+            "type": "text",
+            "label": "Host",
+            "placeholder": "example.com or config alias"
+          },
+          {
+            "key": "user",
+            "type": "text",
+            "label": "User",
+            "placeholder": "deploy"
+          },
+          {
+            "key": "port",
+            "type": "text",
+            "label": "Port",
+            "default": "22"
+          },
+          {
+            "key": "identity",
+            "type": "text",
+            "label": "Identity file",
+            "placeholder": "~/.ssh/id_ed25519"
+          },
+          {
+            "key": "command",
+            "type": "text",
+            "label": "Command",
+            "placeholder": "uptime; df -h"
+          }
+        ],
+        "actions": [
+          {
+            "id": "test",
+            "label": "Test",
+            "command": "ssh.panel.run",
+            "args": {
+              "action": "test"
+            }
+          },
+          {
+            "id": "run",
+            "label": "Run",
+            "command": "ssh.panel.run",
+            "args": {
+              "action": "exec"
+            }
+          },
+          {
+            "id": "hosts",
+            "label": "Hosts",
+            "command": "ssh.panel.run",
+            "args": {
+              "action": "hosts"
+            }
+          }
+        ]
+      }
+    ],
+    "frontends": [
+      {
+        "id": "ssh.console",
+        "title": "SSH console",
+        "icon": "terminal",
+        "entry": "web/app.js",
+        "description": "Web Component console for non-interactive SSH commands."
+      }
+    ],
+    "status": [
+      {
+        "id": "ssh.status",
+        "text": "SSH",
+        "tooltip": "SSH plugin status",
+        "command": "ssh.test"
+      }
+    ],
+    "settings": [
+      {
+        "id": "ssh.settings",
+        "title": "SSH",
+        "fields": [
+          {
+            "key": "binary",
+            "type": "text",
+            "label": "SSH binary",
+            "default": "ssh",
+            "required": true
+          },
+          {
+            "key": "config",
+            "type": "text",
+            "label": "SSH config file",
+            "placeholder": "~/.ssh/config"
+          },
+          {
+            "key": "user",
+            "type": "text",
+            "label": "Default user"
+          },
+          {
+            "key": "port",
+            "type": "text",
+            "label": "Default port",
+            "default": "22"
+          },
+          {
+            "key": "identity",
+            "type": "text",
+            "label": "Default identity file"
+          },
+          {
+            "key": "strictHostKeyChecking",
+            "type": "select",
+            "label": "Host key checking",
+            "options": [
+              {
+                "label": "Accept new",
+                "value": "accept-new"
+              },
+              {
+                "label": "Strict",
+                "value": "yes"
+              },
+              {
+                "label": "Off",
+                "value": "no"
+              }
+            ],
+            "default": "accept-new"
+          },
+          {
+            "key": "timeout",
+            "type": "number",
+            "label": "Connect timeout (seconds)",
+            "default": 10,
+            "min": 2,
+            "max": 45
+          }
+        ]
+      }
+    ]
+  },
+  "icon": "terminal"
+}

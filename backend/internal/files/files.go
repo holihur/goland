@@ -26,6 +26,7 @@ var (
 	ErrConflict     = errors.New("file changed since it was read")
 	ErrTooLarge     = errors.New("file is too large")
 	ErrBinary       = errors.New("binary file")
+	ErrInvalidQuery = errors.New("invalid search query")
 )
 
 const MaxFileSize = 5 << 20

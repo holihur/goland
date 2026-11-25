@@ -108,6 +108,7 @@
 }
 
 .cm-theme,
+.cm-theme-light,
 .cm-theme-dark {
   height: 100%;
 }
@@ -136,16 +137,22 @@
 .cm-activeLine {
   background: hsl(var(--accent) / 0.35) !important;
 }
+.cm-breakpointGutter {
+  width: 14px;
+  cursor: pointer;
+}
+.cm-breakpointGutter .cm-gutterElement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .cm-breakpoint-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-left: -1px;
-  margin-right: 6px;
+  display: block;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
   background: #f87171;
   box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.16);
-  vertical-align: middle;
 }
 .xterm {
   padding: 10px 12px;

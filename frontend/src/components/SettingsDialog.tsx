@@ -1,8 +1,10 @@
 import { Moon, Sun } from "lucide-react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { languages, useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { readEditorSettings, writeEditorSettings } from "@/lib/editorSettings";
 
 export function SettingsDialog({
   open,
@@ -13,6 +15,7 @@ export function SettingsDialog({
 }) {
   const { language, setLanguage, t } = useI18n();
   const { theme, setTheme } = useTheme();
+  const [formatOnSave, setFormatOnSave] = useState(() => readEditorSettings().formatOnSave);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -51,6 +54,42 @@ export function SettingsDialog({
                 );
               })}
             </div>
+          </section>
+
+          <section className="space-y-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Editor</div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={formatOnSave}
+              onClick={() => {
+                const next = !formatOnSave;
+                setFormatOnSave(next);
+                writeEditorSettings({ formatOnSave: next });
+              }}
+              className={cn(
+                "flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-xs transition-colors",
+                formatOnSave ? "border-primary bg-primary/10" : "bg-card/50 text-muted-foreground hover:bg-accent",
+              )}
+            >
+              <span>
+                Format on save
+                <span className="mt-0.5 block text-[10px] text-muted-foreground">Run the language server formatter before writing.</span>
+              </span>
+              <span
+                className={cn(
+                  "relative h-5 w-9 shrink-0 rounded-full border transition-colors",
+                  formatOnSave ? "border-primary bg-primary/30" : "bg-muted",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 h-3.5 w-3.5 rounded-full bg-foreground transition-transform",
+                    formatOnSave ? "left-[18px]" : "left-0.5",
+                  )}
+                />
+              </span>
+            </button>
           </section>
 
           <section className="space-y-2">
