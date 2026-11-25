@@ -69,6 +69,20 @@ jobs:
       - name: Build
         run: cd frontend && pnpm build
 
+  agent:
+    name: Agent module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Test vendored agent
+        run: cd agent && go test ./...
+      - name: Build embedded agent plugin
+        run: cd plugins/agent && go build ./...
+
   source-limits:
     name: Source file limits
     runs-on: ubuntu-latest

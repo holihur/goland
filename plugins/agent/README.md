@@ -1,30 +1,44 @@
 # Agent plugin
 
-Wraps the local [`../agent`](../../agent) CLI as a Goland plugin:
+An embedded coding agent for Goland. The agent runtime is vendored at
+[`../../agent`](../../agent) (upstream: `github.com/holihur/agent`) and runs inside the plugin
+process, so no separate `agent` binary is required.
+
+Features:
 
 - one-shot prompts with persistent sessions
 - workspace `.env` support for `LLM_API_KEY`/`LLM_APIKEY`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API`
-- optional explicitly configured credentials, API style, model, max turns
+- optional explicit credentials, API style, model and max turns
 - file tools on by default, shell tool off by default
-- native Web Component console with Shadow DOM
-- streamed command output notifications are forwarded to the plugin status/event bus
+- native Web Component console with streaming output and cancellation
+- host status/error reporting
 
-The plugin invokes the `agent` binary as the workspace Unix user. Install it with:
-
-```bash
-cd ../../agent
-go build -trimpath -o /usr/local/bin/agent ./cmd/agent
-```
-
-Then build and package this plugin:
+Build and package:
 
 ```bash
+go mod tidy
 go build -trimpath -o bin/goland-agent .
 ../../scripts/package-plugin.sh . agent.zip
 ```
 
 Upload `agent.zip` from the admin Plugins dialog, enable **Agent** in workspace settings, then
-open **Agent console** from the activity bar. The console is the single UI entry point; the
-plugin intentionally does not contribute a duplicate declarative panel. Put LLM credentials in the workspace `.env` or
-configure them in the plugin settings. Prefer workspace `.env` or a future BYOK bridge over
-storing long-lived keys in plugin settings.
+open **Agent console** from the activity bar. Put LLM credentials in the workspace `.env` or
+configure them in plugin settings. The console is the single UI entry point.
+
+## Vendored upstream
+
+The agent runtime lives in [`../../agent`](../../agent) and is imported through a local module
+replacement. It was imported with:
+
+```bash
+git subtree add --prefix agent git@github.com:holihur/agent.git main --squash
+```
+
+Pull upstream improvements:
+
+```bash
+git subtree pull --prefix agent git@github.com:holihur/agent.git main --squash
+```
+
+Keep local patches as normal commits. Resolve subtree conflicts in `agent/`, then rebuild this
+plugin. Before redistributing the vendored code, confirm the upstream license.

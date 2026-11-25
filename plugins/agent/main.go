@@ -1,19 +1,19 @@
-// Command goland-agent is a Goland plugin wrapping the local agent CLI.
+// Command goland-agent is a Goland plugin embedding github.com/holihur/agent.
 package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
+	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	agentpkg "github.com/holihur/agent"
 )
 
 type request struct {
@@ -40,7 +40,6 @@ type commandParams struct {
 type plugin struct {
 	mu        sync.Mutex
 	encoder   *json.Encoder
-	binary    string
 	api       string
 	baseURL   string
 	model     string
@@ -55,9 +54,9 @@ type plugin struct {
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(make([]byte, 64<<10), 4<<20)
+	scanner.Buffer(make([]byte, 64<<10), 8<<20)
 	p := &plugin{
-		encoder: json.NewEncoder(os.Stdout), binary: "agent", api: "anthropic",
+		encoder: json.NewEncoder(os.Stdout), api: "anthropic",
 		session: "goland", maxTurns: 8, fsTools: true, cancel: map[string]context.CancelFunc{},
 	}
 	for scanner.Scan() {
@@ -71,7 +70,7 @@ func main() {
 			_ = json.Unmarshal(req.Params, &params)
 			p.root = params.RootPath
 			p.applyConfig(params.Config)
-			p.reply(req.ID, map[string]any{"name": "Agent", "version": "0.1.0"})
+			p.reply(req.ID, map[string]any{"name": "Agent", "version": "0.3.0"})
 			p.updateStatus()
 		case "health":
 			p.reply(req.ID, map[string]any{"status": "ok"})
@@ -101,9 +100,6 @@ func main() {
 }
 
 func (p *plugin) applyConfig(config map[string]any) {
-	if value, ok := config["agent.settings.binary"].(string); ok && strings.TrimSpace(value) != "" {
-		p.binary = strings.TrimSpace(value)
-	}
 	if value, ok := config["agent.settings.api"].(string); ok && strings.TrimSpace(value) != "" {
 		p.api = strings.TrimSpace(value)
 	}
@@ -131,18 +127,33 @@ func (p *plugin) applyConfig(config map[string]any) {
 }
 
 func (p *plugin) updateStatus() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	out, err := p.exec(ctx, 5*time.Second, "-version")
+	cfg := p.credentials()
 	text := "Agent ready"
-	tooltip := firstLine(out)
-	if err != nil {
-		text = "Agent unavailable"
-		if tooltip == "" {
-			tooltip = "agent binary not found"
-		}
+	tooltip := "Embedded agent is configured"
+	if cfg.APIKey == "" || cfg.BaseURL == "" || cfg.Model == "" {
+		text = "Agent: configure credentials"
+		tooltip = "Set LLM_API_KEY/LLM_BASE_URL/LLM_MODEL in the workspace .env or plugin settings"
 	}
 	p.notify("ui/status", map[string]any{"id": "agent.status", "text": text, "tooltip": tooltip})
+}
+
+func (p *plugin) credentials() agentpkg.Config {
+	values := readDotEnv(filepath.Join(p.root, ".env"))
+	first := func(items ...string) string {
+		for _, item := range items {
+			if strings.TrimSpace(item) != "" {
+				return strings.TrimSpace(item)
+			}
+		}
+		return ""
+	}
+	return agentpkg.Config{
+		APIKey:   first(p.apiKey, values["LLM_API_KEY"], values["LLM_APIKEY"], os.Getenv("LLM_API_KEY"), os.Getenv("LLM_APIKEY")),
+		BaseURL:  first(p.baseURL, values["LLM_BASE_URL"], os.Getenv("LLM_BASE_URL")),
+		Model:    first(p.model, values["LLM_MODEL"], os.Getenv("LLM_MODEL")),
+		API:      first(p.api, values["LLM_API"], os.Getenv("LLM_API")),
+		MaxTurns: p.maxTurns,
+	}
 }
 
 func (p *plugin) execute(id *int64, params commandParams) {
@@ -170,165 +181,129 @@ func (p *plugin) execute(id *int64, params commandParams) {
 		delete(p.cancel, params.RequestID)
 		p.mu.Unlock()
 	}()
-	var out string
+
+	var output string
 	var err error
-	if action == "sessions" {
-		out, err = p.exec(ctx, 20*time.Second, "-sessions")
-	} else {
+	streamed := false
+	switch action {
+	case "sessions":
+		output = p.listSessions()
+	case "ask":
 		prompt := stringInput(params.Inputs, "prompt")
 		if prompt == "" {
-			out = "prompt is required"
+			output = "prompt is required"
 		} else {
 			session := stringInput(params.Inputs, "session")
 			if session == "" {
 				session = p.session
 			}
-			args := p.askArgs(prompt, session)
-			out, err = p.execStreaming(ctx, params.RequestID, args...)
+			output, streamed, err = p.ask(ctx, params.RequestID, prompt, session)
 		}
+	default:
+		output = "unknown agent action " + action
 	}
 	if ctx.Err() == context.DeadlineExceeded {
-		out += "\n[agent command timed out]"
+		output += "\n[agent command timed out]"
 	} else if ctx.Err() == context.Canceled {
-		out += "\n[agent command cancelled]"
+		output += "\n[agent command cancelled]"
 	}
-	if err != nil && out == "" {
-		out = err.Error()
+	if err != nil && output == "" {
+		output = err.Error()
 	}
-	if out == "" {
-		out = "(no output)"
+	if output == "" && !streamed {
+		output = "(no output)"
 	}
-	text := "Agent ready"
+	status := "Agent ready"
+	kind := "info"
+	level := "info"
 	if err != nil {
-		text = "Agent failed"
-		p.notify("ui/notify", map[string]any{"level": "error", "message": "Agent: " + firstLine(out)})
+		status = "Agent failed"
+		kind = "error"
+		level = "error"
 	} else if action == "ask" {
-		text = "Agent answered"
+		status = "Agent answered"
+		kind = "success"
 	} else if action == "sessions" {
-		text = "Agent sessions"
+		status = "Agent sessions"
 	}
-	p.notify("ui/status", map[string]any{"id": "agent.status", "text": text, "tooltip": firstLine(out)})
-	p.reply(id, map[string]any{"output": out})
+	p.notify("ui/status", map[string]any{"id": "agent.status", "text": status, "tooltip": firstLine(output)})
+	if level == "error" {
+		p.notify("ui/notify", map[string]any{"level": level, "message": "Agent: " + firstLine(output)})
+	}
+	_ = kind
+	p.reply(id, map[string]any{"output": output})
 }
 
-func (p *plugin) askArgs(prompt, session string) []string {
-	args := []string{"-q", prompt, "-max-turns", strconv.Itoa(p.maxTurns)}
-	if p.api != "" {
-		args = append(args, "-api", p.api)
+func (p *plugin) ask(ctx context.Context, requestID, prompt, session string) (string, bool, error) {
+	cfg := p.credentials()
+	if cfg.APIKey == "" || cfg.BaseURL == "" || cfg.Model == "" {
+		return "", false, errors.New("agent credentials are missing: set LLM_APIKEY/LLM_BASE_URL/LLM_MODEL")
 	}
-	if p.model != "" {
-		args = append(args, "-model", p.model)
+	a, err := agentpkg.New(cfg)
+	if err != nil {
+		return "", false, err
 	}
-	if session != "" {
-		args = append(args, "-session", session)
-	}
+	defer a.Close()
 	if p.fsTools {
-		args = append(args, "-fs", "on")
-	} else {
-		args = append(args, "-fs", "off")
+		if err := a.FS(); err != nil {
+			return "", false, err
+		}
 	}
 	if p.shellTool {
-		args = append(args, "-shell", "on")
-	} else {
-		args = append(args, "-shell", "off")
-	}
-	return args
-}
-
-func (p *plugin) exec(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
-	runCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	cmd := exec.CommandContext(runCtx, p.binary, args...)
-	cmd.Dir = p.root
-	cmd.Env = p.env()
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	text := strings.TrimSpace(string(out))
-	if extra := strings.TrimSpace(stderr.String()); extra != "" {
-		if text != "" {
-			text += "\n"
+		if err := a.Shell(); err != nil {
+			return "", false, err
 		}
-		text += extra
 	}
-	if err != nil && text == "" {
-		text = err.Error()
+	streamed := false
+	a.OnTextDelta(func(delta agentpkg.TextDelta) {
+		if delta.Text != "" {
+			streamed = true
+			p.notify("command/output", map[string]any{"requestId": requestID, "chunk": delta.Text})
+		}
+	})
+	if session != "" {
+		if err := a.LoadSession(session); err != nil && !errors.Is(err, agentpkg.ErrSessionNotFound) {
+			return "", false, err
+		}
 	}
-	return text, err
-}
-
-func (p *plugin) execStreaming(ctx context.Context, requestID string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, p.binary, args...)
-	cmd.Dir = p.root
-	cmd.Env = p.env()
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	stdout, err := cmd.StdoutPipe()
+	out, err := a.Run(ctx, prompt)
 	if err != nil {
-		return "", err
+		return out, streamed, err
 	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return "", err
-	}
-	if err := cmd.Start(); err != nil {
-		return "", err
-	}
-	var output strings.Builder
-	var mu sync.Mutex
-	read := func(reader interface{ Read([]byte) (int, error) }) {
-		buffer := make([]byte, 16<<10)
-		for {
-			n, err := reader.Read(buffer)
-			if n > 0 {
-				chunk := string(buffer[:n])
-				mu.Lock()
-				if output.Len() < 2<<20 {
-					output.WriteString(chunk)
-				}
-				mu.Unlock()
-				p.notify("command/output", map[string]any{"requestId": requestID, "chunk": chunk})
-			}
-			if err != nil {
-				return
-			}
+	if session != "" {
+		if saveErr := a.SaveSession(session); saveErr != nil {
+			return out, streamed, saveErr
 		}
 	}
-	var readers sync.WaitGroup
-	readers.Add(2)
-	go func() { defer readers.Done(); read(stdout) }()
-	go func() { defer readers.Done(); read(stderr) }()
-	readers.Wait()
-	err = cmd.Wait()
-	return strings.TrimSpace(output.String()), err
+	if streamed {
+		// The host prefixes streamed chunks to the result; avoid sending the
+		// final answer twice.
+		return "", true, nil
+	}
+	return out, false, nil
 }
 
-func (p *plugin) env() []string {
-	values := map[string]string{}
-	for _, item := range os.Environ() {
-		if index := strings.IndexByte(item, '='); index > 0 {
-			values[item[:index]] = item[index+1:]
+func (p *plugin) listSessions() string {
+	dir := filepath.Join(p.root, ".agent", "sessions")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "No saved sessions."
 		}
+		return err.Error()
 	}
-	for key, value := range readDotEnv(filepath.Join(p.root, ".env")) {
-		if _, ok := values[key]; !ok {
-			values[key] = value
+	names := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
 		}
+		names = append(names, strings.TrimSuffix(entry.Name(), ".jsonl"))
 	}
-	overrides := map[string]string{
-		"LLM_API_KEY": p.apiKey, "LLM_APIKEY": p.apiKey,
-		"LLM_BASE_URL": p.baseURL, "LLM_MODEL": p.model, "LLM_API": p.api,
+	sort.Strings(names)
+	if len(names) == 0 {
+		return "No saved sessions."
 	}
-	for key, value := range overrides {
-		if value != "" {
-			values[key] = value
-		}
-	}
-	out := make([]string, 0, len(values))
-	for key, value := range values {
-		out = append(out, key+"="+value)
-	}
-	return out
+	return strings.Join(names, "\n")
 }
 
 func readDotEnv(path string) map[string]string {
@@ -343,10 +318,8 @@ func readDotEnv(path string) map[string]string {
 			continue
 		}
 		key, value, _ := strings.Cut(line, "=")
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		value = strings.Trim(value, `"'`)
-		if key != "" {
+		value = strings.Trim(strings.TrimSpace(value), `"'`)
+		if key = strings.TrimSpace(key); key != "" {
 			out[key] = value
 		}
 	}

@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "id": "agent",
   "name": "Agent",
-  "version": "0.2.0",
-  "description": "Run the local agent coding assistant with BYOK credentials, MCP tools and persistent sessions.",
+  "version": "0.3.0",
+  "description": "Embedded coding agent with BYOK credentials, MCP tools and persistent sessions.",
   "icon": "brain",
   "executable": "bin/goland-agent",
   "contributes": {
@@ -43,13 +43,6 @@
         "id": "agent.settings",
         "title": "Agent",
         "fields": [
-          {
-            "key": "binary",
-            "type": "text",
-            "label": "Agent binary",
-            "default": "agent",
-            "required": true
-          },
           {
             "key": "api",
             "type": "select",
