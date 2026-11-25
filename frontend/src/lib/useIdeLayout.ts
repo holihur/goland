@@ -76,16 +76,25 @@ export function useIdeLayout(userId: string, workspaceId: string) {
   }, [userId, workspaceId]);
 
   useEffect(() => {
+    let frame = 0;
+    let pending: { width: number; height: number } | null = null;
+    const apply = () => {
+      frame = 0;
+      if (!pending) return;
+      const next = pending;
+      pending = null;
+      setLayout((current) => updateBottom(current, {}, next.height));
+    };
     const onResize = () => {
-      const next = currentViewport();
-      setViewport(next);
-      setLayout((current) => {
-        const bounded = updateBottom(current, {}, next.height);
-        return updateSidebar(bounded, { sidebarWidth: bounded.sidebarWidth });
-      });
+      pending = currentViewport();
+      setViewport(pending);
+      if (frame === 0) frame = window.requestAnimationFrame(apply);
     };
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   const setSidebarWidth = useCallback((width: number) => {

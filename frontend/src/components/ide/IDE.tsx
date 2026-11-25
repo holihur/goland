@@ -5,13 +5,6 @@ import type { Diagnostic, User, Workspace } from "@/lib/types";
 import { LSPClient, languageForPath, type SourceLocation } from "@/lib/lsp";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FileExplorer } from "@/components/editor/FileExplorer";
-import { SearchPanel } from "@/components/editor/SearchPanel";
-import { OutlinePanel } from "@/components/editor/OutlinePanel";
-import { GitPanel } from "@/components/editor/GitPanel";
-import { CommandPalette } from "@/components/editor/CommandPalette";
-import { SettingsDialog } from "@/components/SettingsDialog";
-import { TokenDialog } from "@/components/TokenDialog";
-import { ByokDialog } from "@/components/ByokDialog";
 import { ActivityBar, ReferencesDialog, WelcomePane, WorkspaceSettings, type SideView } from "./IDEparts";
 import { BottomPanel } from "./BottomPanel";
 import { EditorGroups, type EditorTab as Tab } from "./EditorGroups";
@@ -40,6 +33,21 @@ import {
 } from "@/lib/layout";
 
 const DebugPanel = lazy(() => import("@/components/editor/DebugPanel").then((module) => ({ default: module.DebugPanel })));
+const CommandPalette = lazy(() =>
+  import("@/components/editor/CommandPalette").then((module) => ({ default: module.CommandPalette })),
+);
+const SettingsDialog = lazy(() =>
+  import("@/components/SettingsDialog").then((module) => ({ default: module.SettingsDialog })),
+);
+const TokenDialog = lazy(() => import("@/components/TokenDialog").then((module) => ({ default: module.TokenDialog })));
+const ByokDialog = lazy(() => import("@/components/ByokDialog").then((module) => ({ default: module.ByokDialog })));
+const SearchPanel = lazy(() =>
+  import("@/components/editor/SearchPanel").then((module) => ({ default: module.SearchPanel })),
+);
+const OutlinePanel = lazy(() =>
+  import("@/components/editor/OutlinePanel").then((module) => ({ default: module.OutlinePanel })),
+);
+const GitPanel = lazy(() => import("@/components/editor/GitPanel").then((module) => ({ default: module.GitPanel })));
 
 function tabName(path: string) {
   return path.split("/").pop() ?? path;
@@ -598,29 +606,35 @@ export function IDE({
                 />
               )}
               {view === "search" && (
-                <SearchPanel
-                  workspaceId={workspace.id}
-                  onOpenFile={(path, line, column) => {
-                    if (line) void openLocation({ path, line, column: column ?? 1, endLine: line, endColumn: column ?? 1 });
-                    else void openFile(path);
-                  }}
-                  onReplaced={(paths) => void reloadReplacedFiles(paths)}
-                />
+                <Suspense fallback={<div className="p-3 text-xs text-muted-foreground">Loading search…</div>}>
+                  <SearchPanel
+                    workspaceId={workspace.id}
+                    onOpenFile={(path, line, column) => {
+                      if (line) void openLocation({ path, line, column: column ?? 1, endLine: line, endColumn: column ?? 1 });
+                      else void openFile(path);
+                    }}
+                    onReplaced={(paths) => void reloadReplacedFiles(paths)}
+                  />
+                </Suspense>
               )}
               {view === "outline" && (
-                <OutlinePanel
-                  path={activePath}
-                  lsp={activeTab ? lspClients[lspTargetForPath(activeTab.path)?.key ?? ""] ?? null : null}
-                  onOpenLocation={(location) => void openLocation(location)}
-                />
+                <Suspense fallback={<div className="p-3 text-xs text-muted-foreground">Loading outline…</div>}>
+                  <OutlinePanel
+                    path={activePath}
+                    lsp={activeTab ? lspClients[lspTargetForPath(activeTab.path)?.key ?? ""] ?? null : null}
+                    onOpenLocation={(location) => void openLocation(location)}
+                  />
+                </Suspense>
               )}
               {view === "git" && (
-                <GitPanel
-                  workspaceId={workspace.id}
-                  refreshKey={gitKey}
-                  onOpenFile={openFile}
-                  onWorkspaceChanged={refreshGit}
-                />
+                <Suspense fallback={<div className="p-3 text-xs text-muted-foreground">Loading source control…</div>}>
+                  <GitPanel
+                    workspaceId={workspace.id}
+                    refreshKey={gitKey}
+                    onOpenFile={openFile}
+                    onWorkspaceChanged={refreshGit}
+                  />
+                </Suspense>
               )}
               {view === "debug" && (
                 <Suspense fallback={<div className="p-3 text-xs text-muted-foreground">Loading debugger…</div>}>
@@ -782,17 +796,33 @@ export function IDE({
         }}
       />
 
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-      <TokenDialog open={tokensOpen} onOpenChange={setTokensOpen} />
-      <ByokDialog open={byokOpen} onOpenChange={setByokOpen} />
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsDialog open onOpenChange={setSettingsOpen} />
+        </Suspense>
+      )}
+      {tokensOpen && (
+        <Suspense fallback={null}>
+          <TokenDialog open onOpenChange={setTokensOpen} />
+        </Suspense>
+      )}
+      {byokOpen && (
+        <Suspense fallback={null}>
+          <ByokDialog open onOpenChange={setByokOpen} />
+        </Suspense>
+      )}
 
-      <CommandPalette
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-        workspaceId={workspace.id}
-        onOpenFile={openFile}
-        actions={paletteActions}
-      />
+      {paletteOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette
+            open
+            onOpenChange={setPaletteOpen}
+            workspaceId={workspace.id}
+            onOpenFile={openFile}
+            actions={paletteActions}
+          />
+        </Suspense>
+      )}
     </TooltipProvider>
   );
 }

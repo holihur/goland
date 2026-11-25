@@ -2,12 +2,18 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { User, Workspace } from "@/lib/types";
-import { LoginPage } from "@/components/LoginPage";
-import { MfaSetupPage } from "@/components/MfaSetupPage";
-import { WorkspaceHome } from "@/components/WorkspaceHome";
 import { useI18n } from "@/lib/i18n";
 
 const IDE = lazy(() => import("@/components/ide/IDE").then((module) => ({ default: module.IDE })));
+const LoginPage = lazy(() =>
+  import("@/components/LoginPage").then((module) => ({ default: module.LoginPage })),
+);
+const WorkspaceHome = lazy(() =>
+  import("@/components/WorkspaceHome").then((module) => ({ default: module.WorkspaceHome })),
+);
+const MfaSetupPage = lazy(() =>
+  import("@/components/MfaSetupPage").then((module) => ({ default: module.MfaSetupPage })),
+);
 
 function LoadingScreen({ label }: { label: string }) {
   return (
@@ -86,35 +92,39 @@ export default function App() {
 
   if (phase === "login" || !user) {
     return (
-      <LoginPage
-        onLogin={(me, setupRequired = false) => {
-          setUser(me);
-          setMfaSetupRequired(setupRequired);
-          if (setupRequired) {
-            setPhase("ready");
-            return;
-          }
-          setPhase("loading");
-          loadWorkspaces()
-            .then(() => setPhase("ready"))
-            .catch(() => setPhase("ready"));
-        }}
-      />
+      <Suspense fallback={<LoadingScreen label={t("app.opening")} />}>
+        <LoginPage
+          onLogin={(me, setupRequired = false) => {
+            setUser(me);
+            setMfaSetupRequired(setupRequired);
+            if (setupRequired) {
+              setPhase("ready");
+              return;
+            }
+            setPhase("loading");
+            loadWorkspaces()
+              .then(() => setPhase("ready"))
+              .catch(() => setPhase("ready"));
+          }}
+        />
+      </Suspense>
     );
   }
 
   if (mfaSetupRequired) {
     return (
-      <MfaSetupPage
-        user={user}
-        onComplete={() => {
-          setMfaSetupRequired(false);
-          setPhase("loading");
-          loadWorkspaces()
-            .then(() => setPhase("ready"))
-            .catch(() => setPhase("login"));
-        }}
-      />
+      <Suspense fallback={<LoadingScreen label={t("app.opening")} />}>
+        <MfaSetupPage
+          user={user}
+          onComplete={() => {
+            setMfaSetupRequired(false);
+            setPhase("loading");
+            loadWorkspaces()
+              .then(() => setPhase("ready"))
+              .catch(() => setPhase("login"));
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -138,15 +148,17 @@ export default function App() {
   }
 
   return (
-    <WorkspaceHome
-      user={user}
-      workspaces={workspaces}
-      onOpen={(workspace) => {
-        window.location.hash = `/${workspace.id}`;
-        setSelectedID(workspace.id);
-      }}
-      onRefresh={loadWorkspaces}
-      onLogout={logout}
-    />
+    <Suspense fallback={<LoadingScreen label={t("app.opening")} />}>
+      <WorkspaceHome
+        user={user}
+        workspaces={workspaces}
+        onOpen={(workspace) => {
+          window.location.hash = `/${workspace.id}`;
+          setSelectedID(workspace.id);
+        }}
+        onRefresh={loadWorkspaces}
+        onLogout={logout}
+      />
+    </Suspense>
   );
 }

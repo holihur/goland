@@ -59,6 +59,13 @@ func (m *Manager) ContentSearch(w *store.Workspace, opts ContentOptions) (*Conte
 	if err != nil {
 		return nil, err
 	}
+	query := strings.TrimSpace(opts.Query)
+	literal := !opts.Regex
+	needle := query
+	if literal && !opts.CaseSensitive {
+		needle = strings.ToLower(needle)
+	}
+	literalASCII := literal && asciiOnly(needle)
 	result := &ContentSearchResult{Matches: []ContentMatch{}}
 	seenFiles := map[string]bool{}
 	err = walkSearchFiles(w, m, root, opts.Path, func(rel, full string) error {
@@ -70,16 +77,42 @@ func (m *Manager) ContentSearch(w *store.Workspace, opts ContentOptions) (*Conte
 		if !ok {
 			return nil
 		}
-		for lineNumber, line := range strings.Split(string(data), "\n") {
-			if len(result.Matches) >= limit {
-				result.Truncated = true
-				return fs.SkipAll
+		text := string(data)
+		lineNumber := 0
+		for start := 0; start <= len(text); {
+			end := strings.IndexByte(text[start:], '\n')
+			if end < 0 {
+				end = len(text)
+			} else {
+				end += start
 			}
-			line = strings.TrimSuffix(line, "\r")
-			for _, loc := range pattern.FindAllStringIndex(line, -1) {
+			lineNumber++
+			line := strings.TrimSuffix(text[start:end], "\r")
+			var offsets [][2]int
+			if literalASCII && asciiOnly(line) {
+				hay := line
+				if !opts.CaseSensitive {
+					hay = strings.ToLower(line)
+				}
+				offset := 0
+				for offset <= len(hay) {
+					index := strings.Index(hay[offset:], needle)
+					if index < 0 {
+						break
+					}
+					from := offset + index
+					offsets = append(offsets, [2]int{from, from + len(needle)})
+					offset = from + len(needle)
+				}
+			} else {
+				for _, loc := range pattern.FindAllStringIndex(line, -1) {
+					offsets = append(offsets, [2]int{loc[0], loc[1]})
+				}
+			}
+			for _, loc := range offsets {
 				result.Matches = append(result.Matches, ContentMatch{
 					Path:      rel,
-					Line:      lineNumber + 1,
+					Line:      lineNumber,
 					Column:    utf8.RuneCountInString(line[:loc[0]]) + 1,
 					EndColumn: utf8.RuneCountInString(line[:loc[1]]) + 1,
 					Text:      truncateRunes(line, SearchTextMax),
@@ -90,11 +123,24 @@ func (m *Manager) ContentSearch(w *store.Workspace, opts ContentOptions) (*Conte
 					return fs.SkipAll
 				}
 			}
+			if end == len(text) {
+				break
+			}
+			start = end + 1
 		}
 		return nil
 	})
 	result.Files = len(seenFiles)
 	return result, err
+}
+
+func asciiOnly(value string) bool {
+	for i := 0; i < len(value); i++ {
+		if value[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Manager) ContentReplace(w *store.Workspace, opts ContentOptions) (*ContentReplaceResult, error) {

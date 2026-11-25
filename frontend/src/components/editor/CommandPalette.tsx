@@ -1,17 +1,10 @@
 import { useEffect, useState } from "react";
 import { Command } from "cmdk";
-import { FileCode2, FolderOpen, Loader2, Save, Search, TerminalSquare } from "lucide-react";
+import { FileCode2, Loader2, Search } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Entry } from "@/lib/types";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-
-export interface PaletteAction {
-  id: string;
-  label: string;
-  hint?: string;
-  icon?: React.ReactNode;
-  run: () => void;
-}
+import type { PaletteAction } from "./paletteTypes";
 
 export function CommandPalette({
   open,
@@ -118,9 +111,3 @@ export function CommandPalette({
     </Dialog>
   );
 }
-
-export const paletteIcons = {
-  save: <Save className="h-3.5 w-3.5" />,
-  terminal: <TerminalSquare className="h-3.5 w-3.5" />,
-  explorer: <FolderOpen className="h-3.5 w-3.5" />,
-};

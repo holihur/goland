@@ -252,6 +252,7 @@ func TestRequireMFASetupAndVerification(t *testing.T) {
 	}(), true, time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
+	m.InvalidateUser(user.ID)
 	if code := call(); code != http.StatusNoContent {
 		t.Fatalf("verified MFA code: %d", code)
 	}

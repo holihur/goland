@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
 import { Check, Copy, Loader2, LockKeyhole } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { User } from "@/lib/types";
@@ -24,6 +23,7 @@ export function MfaSetupPage({ user, onComplete }: { user: User; onComplete: () 
       const result = await api.setupMfa();
       setSecret(result.secret);
       setOtpauthUrl(result.otpauthUrl);
+      const { default: QRCode } = await import("qrcode");
       setQr(await QRCode.toDataURL(result.otpauthUrl, { margin: 1, width: 220 }));
       setError("");
     } catch (err) {

@@ -92,7 +92,7 @@ describe("usePlugins", () => {
     expect(result.current.status["demo.plugin:demo.plugin.status"]).toEqual({ text: "Busy", tooltip: "working" });
     expect(result.current.panels["demo.plugin:demo.plugin.panel"].title).toBe("Updated");
     expect(result.current.panels["demo.plugin:demo.plugin.panel"].state).toEqual({ count: 1 });
-    expect(result.current.outputs.r1).toBe("abcdef");
+    await waitFor(() => expect(result.current.outputs.r1).toBe("abcdef"));
     expect(toastError).toHaveBeenCalledWith("boom");
   });
 
@@ -124,8 +124,10 @@ describe("usePlugins", () => {
     await act(async () => {
       await expect(result.current.execute("demo.plugin", "demo.plugin.hello")).rejects.toThrow("boom");
     });
-    const requestId = Object.keys(result.current.outputs)[0];
-    expect(result.current.outputs[requestId]).toContain("partial");
+    await waitFor(() => {
+      const requestId = Object.keys(result.current.outputs)[0];
+      expect(result.current.outputs[requestId]).toContain("partial");
+    });
   });
 
   it("reports crashes and cancels commands", async () => {

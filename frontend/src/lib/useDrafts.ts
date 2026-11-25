@@ -25,7 +25,6 @@ export function useDrafts(
     const timer = window.setTimeout(() => {
       for (const tab of tabs) {
         if (tab.dirty && !tab.binary) writeDraft(userId, workspaceId, tab.path, tab.content, tab.etag);
-        else clearDraft(userId, workspaceId, tab.path);
       }
     }, 500);
     return () => window.clearTimeout(timer);
@@ -35,7 +34,6 @@ export function useDrafts(
     const flush = () => {
       for (const tab of tabsRef.current) {
         if (tab.dirty && !tab.binary) writeDraft(userId, workspaceId, tab.path, tab.content, tab.etag);
-        else clearDraft(userId, workspaceId, tab.path);
       }
     };
     window.addEventListener("pagehide", flush);

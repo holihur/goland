@@ -3,7 +3,7 @@ import { Puzzle } from "lucide-react";
 import { pluginIcon } from "./plugin-icons";
 import { toast } from "sonner";
 import { ApiError } from "./api";
-import type { PaletteAction } from "@/components/editor/CommandPalette";
+import type { PaletteAction } from "@/components/editor/paletteTypes";
 import type { SideView } from "./layout";
 import { pluginLspSocket } from "./plugin-api";
 import type { WorkspacePlugin } from "./plugin-types";

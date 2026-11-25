@@ -57,6 +57,7 @@ func (s *Server) setupMFA(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", "could not save MFA setup")
 		return
 	}
+	s.auth.InvalidateUser(user.ID)
 	s.audit(r, "auth.mfa.setup", user.ID.Hex(), "")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"secret": secret, "otpauthUrl": auth.TOTPProvisioningURI("Goland", user.Email, secret),
@@ -100,6 +101,7 @@ func (s *Server) enableMFA(w http.ResponseWriter, r *http.Request) {
 	if sess := auth.SessionFrom(r.Context()); sess != nil {
 		_ = s.store.UpdateSessionMFA(r.Context(), sess.ID, true, now.Add(s.auth.TTL))
 	}
+	s.auth.InvalidateUser(user.ID)
 	s.audit(r, "auth.mfa.enable", user.ID.Hex(), "")
 	writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "recoveryCodes": codes})
 }
@@ -145,6 +147,7 @@ func (s *Server) disableMFA(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", "could not disable MFA")
 		return
 	}
+	s.auth.InvalidateUser(user.ID)
 	s.audit(r, "auth.mfa.disable", user.ID.Hex(), "")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -206,6 +209,7 @@ func (s *Server) verifyMFA(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", "could not complete MFA")
 		return
 	}
+	s.auth.InvalidateUser(user.ID)
 	csrf, err := auth.RandomToken(32)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal", "could not create session")

@@ -3,10 +3,12 @@ import { Circle, FlaskConical, Maximize2, Minimize2, PanelBottom, TerminalSquare
 import type { TaskInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { BottomView } from "@/lib/layout";
-import { TestsPanel } from "@/components/editor/TestsPanel";
 
 const TerminalPanel = lazy(() =>
   import("@/components/editor/TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
+);
+const TestsPanel = lazy(() =>
+  import("@/components/editor/TestsPanel").then((module) => ({ default: module.TestsPanel })),
 );
 
 export function BottomPanel({
@@ -112,7 +114,9 @@ export function BottomPanel({
       </div>
       {view === "tests" && (
         <div className="min-h-0 flex-1">
-          <TestsPanel workspaceId={workspaceId} onOpenFile={onOpenFile} />
+          <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">Loading tests…</div>}>
+            <TestsPanel workspaceId={workspaceId} onOpenFile={onOpenFile} />
+          </Suspense>
         </div>
       )}
       {view === "output" && (

@@ -1,7 +1,7 @@
 import { Columns2, FlaskConical, GitBranch, ListTree, Maximize2, RotateCcw, Rows2, Search, X } from "lucide-react";
 import { activeGroupIdOf, type LayoutState } from "@/lib/layout";
 import type { EditorTab } from "./EditorGroups";
-import { paletteIcons, type PaletteAction } from "@/components/editor/CommandPalette";
+import { paletteIcons, type PaletteAction } from "@/components/editor/paletteTypes";
 
 export function buildPaletteActions({
   activePath,

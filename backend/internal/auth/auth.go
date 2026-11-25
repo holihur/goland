@@ -11,8 +11,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/argon2"
 
 	"goland/internal/store"
@@ -28,6 +30,11 @@ type ctxKey struct{}
 type tokenKey struct{}
 type sessionKey struct{}
 
+type cachedUser struct {
+	user    *store.User
+	expires time.Time
+}
+
 type Manager struct {
 	Store   *store.Store
 	TTL     time.Duration
@@ -35,6 +42,11 @@ type Manager struct {
 	Now     func() time.Time
 	Argon   argonParams
 	randErr error
+
+	cacheMu    sync.RWMutex
+	cache      map[primitive.ObjectID]cachedUser
+	cacheTTL   time.Duration
+	cacheLimit int
 }
 
 type argonParams struct {
@@ -49,6 +61,7 @@ func NewManager(st *store.Store, ttl time.Duration, secure bool) *Manager {
 	return &Manager{
 		Store: st, TTL: ttl, Secure: secure, Now: time.Now,
 		Argon: argonParams{time: 2, memory: 32 * 1024, threads: 2, keyLen: 32, saltLen: 16},
+		cache: map[primitive.ObjectID]cachedUser{}, cacheTTL: 5 * time.Second, cacheLimit: 4096,
 	}
 }
 
@@ -182,10 +195,14 @@ func (m *Manager) Authenticate(next http.Handler) http.Handler {
 			http.Error(w, `{"error":{"code":"unauthorized","message":"session expired"}}`, http.StatusUnauthorized)
 			return
 		}
-		user, err := m.Store.FindUserByID(r.Context(), sess.UserID)
-		if err != nil {
-			http.Error(w, `{"error":{"code":"unauthorized","message":"user not found"}}`, http.StatusUnauthorized)
-			return
+		user, cached := m.cachedUser(sess.UserID)
+		if !cached {
+			user, err = m.Store.FindUserByID(r.Context(), sess.UserID)
+			if err != nil {
+				http.Error(w, `{"error":{"code":"unauthorized","message":"user not found"}}`, http.StatusUnauthorized)
+				return
+			}
+			m.rememberUser(user)
 		}
 		ctx := context.WithValue(r.Context(), ctxKey{}, user)
 		ctx = context.WithValue(ctx, sessionKey{}, sess)
@@ -250,6 +267,51 @@ func (m *Manager) Logout(ctx context.Context, r *http.Request) {
 	if err == nil && c.Value != "" {
 		_ = m.Store.DeleteSessionByHash(ctx, TokenHash(c.Value))
 	}
+}
+
+func (m *Manager) cachedUser(userID primitive.ObjectID) (*store.User, bool) {
+	m.cacheMu.RLock()
+	entry, ok := m.cache[userID]
+	m.cacheMu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	if m.Now().UTC().After(entry.expires) {
+		m.InvalidateUser(userID)
+		return nil, false
+	}
+	return entry.user, true
+}
+
+func (m *Manager) rememberUser(user *store.User) {
+	if user == nil {
+		return
+	}
+	now := m.Now().UTC()
+	m.cacheMu.Lock()
+	if m.cache == nil {
+		m.cache = map[primitive.ObjectID]cachedUser{}
+	}
+	if len(m.cache) >= m.cacheLimit {
+		for key, entry := range m.cache {
+			if now.After(entry.expires) {
+				delete(m.cache, key)
+			}
+		}
+		if len(m.cache) >= m.cacheLimit {
+			m.cache = map[primitive.ObjectID]cachedUser{}
+		}
+	}
+	m.cache[user.ID] = cachedUser{user: user, expires: now.Add(m.cacheTTL)}
+	m.cacheMu.Unlock()
+}
+
+// InvalidateUser drops a cached user after MFA/role changes. The next request
+// re-reads it from MongoDB.
+func (m *Manager) InvalidateUser(userID primitive.ObjectID) {
+	m.cacheMu.Lock()
+	delete(m.cache, userID)
+	m.cacheMu.Unlock()
 }
 
 func UserFrom(ctx context.Context) *store.User {

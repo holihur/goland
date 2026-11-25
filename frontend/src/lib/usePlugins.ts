@@ -52,6 +52,36 @@ export function usePlugins(workspaceId: string) {
   const socketRef = useRef<WebSocket | null>(null);
   const retryRef = useRef<number | null>(null);
   const closedRef = useRef(false);
+  const pendingChunksRef = useRef<Record<string, string>>({});
+  const chunkTimerRef = useRef<number | null>(null);
+
+  const flushChunks = useCallback(() => {
+    if (chunkTimerRef.current !== null) {
+      window.clearTimeout(chunkTimerRef.current);
+      chunkTimerRef.current = null;
+    }
+    const pending = pendingChunksRef.current;
+    pendingChunksRef.current = {};
+    if (Object.keys(pending).length === 0) return;
+    setOutputs((current) => {
+      let next = current;
+      for (const [requestId, chunk] of Object.entries(pending)) {
+        next = upsertOutput(next, requestId, chunk);
+      }
+      return next;
+    });
+  }, []);
+
+  const queueChunk = useCallback(
+    (requestId: string, chunk: string) => {
+      if (!chunk) return;
+      pendingChunksRef.current[requestId] = (pendingChunksRef.current[requestId] ?? "") + chunk;
+      if (chunkTimerRef.current === null) {
+        chunkTimerRef.current = window.setTimeout(flushChunks, 16);
+      }
+    },
+    [flushChunks],
+  );
 
   const applyPlugins = useCallback((list: WorkspacePlugin[]) => {
     setPlugins(list);
@@ -135,8 +165,7 @@ export function usePlugins(workspaceId: string) {
             },
           }));
         } else if (message.type === "output" && message.requestId) {
-          const requestId = message.requestId;
-          setOutputs((current) => upsertOutput(current, requestId, message.chunk ?? ""));
+          queueChunk(message.requestId, message.chunk ?? "");
         } else if (message.type === "notify" || message.type === "log") {
           if (!message.message) return;
           if (message.level === "error") toast.error(message.message);
@@ -160,7 +189,13 @@ export function usePlugins(workspaceId: string) {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [workspaceId]);
+  }, [workspaceId, queueChunk]);
+
+  useEffect(() => {
+    return () => {
+      if (chunkTimerRef.current !== null) window.clearTimeout(chunkTimerRef.current);
+    };
+  }, []);
 
   const execute = useCallback(
     async (
@@ -176,6 +211,7 @@ export function usePlugins(workspaceId: string) {
       setOutputs((current) => ({ ...current, [requestId]: current[requestId] ?? "" }));
       try {
         const result = await executePluginCommand(workspaceId, pluginId, commandId, { ...input, requestId });
+        flushChunks();
         setOutputs((current) => ({
           ...current,
           [requestId]: result.output && result.output.length >= (current[requestId]?.length ?? 0)
@@ -184,12 +220,13 @@ export function usePlugins(workspaceId: string) {
         }));
         return { requestId, output: result.output ?? "", result: result.result };
       } catch (err) {
+        flushChunks();
         const message = err instanceof ApiError ? err.message : "Plugin command failed";
         setOutputs((current) => ({ ...current, [requestId]: (current[requestId] ?? "") + `\n[error] ${message}` }));
         throw err;
       }
     },
-    [workspaceId],
+    [workspaceId, flushChunks],
   );
 
   const cancel = useCallback(

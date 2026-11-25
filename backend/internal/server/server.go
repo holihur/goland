@@ -59,6 +59,7 @@ func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Ma
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeaders)
+	r.Use(compression)
 	r.Use(s.accessLog)
 
 	r.Get("/api/health", s.health)
@@ -203,10 +204,13 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	if info, err := os.Stat(target); err == nil && !info.IsDir() {
 		if strings.Contains(r.URL.Path, "/assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
 		}
 		http.ServeFile(w, r, target)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, index)
 }
 
@@ -226,7 +230,12 @@ func (s *Server) accessLog(next http.Handler) http.Handler {
 		start := time.Now()
 		ww := &statusWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(ww, r)
-		s.log.Info("http", "method", r.Method, "path", r.URL.Path, "status", ww.status, "dur", time.Since(start).String(), "ip", r.RemoteAddr)
+		duration := time.Since(start)
+		// Static assets and health checks are noisy; log API calls, failures and
+		// slow requests only.
+		if strings.HasPrefix(r.URL.Path, "/api/") || ww.status >= 400 || duration > time.Second {
+			s.log.Info("http", "method", r.Method, "path", r.URL.Path, "status", ww.status, "dur", duration.String(), "ip", r.RemoteAddr)
+		}
 	})
 }
 
