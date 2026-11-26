@@ -29,6 +29,9 @@ const (
 	MaxStatusItems   = 20
 	MaxSettingsViews = 20
 	MaxEditorActions = 50
+	MaxMenus         = 20
+	MaxMenuItems     = 100
+	MaxKeybindings   = 100
 	MaxLanguages     = 20
 	MaxDebuggers     = 10
 	MaxFrontends     = 20
@@ -64,6 +67,8 @@ type Contributions struct {
 	Settings      []SettingsView `json:"settings,omitempty"`
 	Hooks         Hooks          `json:"hooks,omitempty"`
 	EditorActions []EditorAction `json:"editorActions,omitempty"`
+	Menus         []Menu         `json:"menus,omitempty"`
+	Keybindings   []Keybinding   `json:"keybindings,omitempty"`
 	Languages     []Language     `json:"languages,omitempty"`
 	Debuggers     []Debugger     `json:"debuggers,omitempty"`
 	Frontends     []Frontend     `json:"frontends,omitempty"`
@@ -74,7 +79,31 @@ type Command struct {
 	ID          string   `json:"id"`
 	Title       string   `json:"title"`
 	Description string   `json:"description,omitempty"`
+	Category    string   `json:"category,omitempty"`
 	Args        []string `json:"args,omitempty"`
+}
+
+// Menu contributes entries to a named IDE menu. Built-in menu ids are file,
+// edit, view, run, tools and help; unknown ids create a plugin menu.
+type Menu struct {
+	ID    string     `json:"id"`
+	Label string     `json:"label"`
+	Items []MenuItem `json:"items"`
+}
+
+// MenuItem places a command in a menu. Group controls the label shown before
+// the item in the menu dropdown.
+type MenuItem struct {
+	Command string `json:"command"`
+	Label   string `json:"label,omitempty"`
+	Group   string `json:"group,omitempty"`
+}
+
+// Keybinding is a default keyboard shortcut for a contributed command. Users
+// can override it from the command center.
+type Keybinding struct {
+	Command string `json:"command"`
+	Key     string `json:"key"`
 }
 
 // Panel is a declarative sidebar view. The frontend only renders predefined
@@ -293,6 +322,12 @@ func Validate(m *Manifest) error {
 	if len(c.EditorActions) > MaxEditorActions {
 		return fmt.Errorf("too many editor actions (max %d)", MaxEditorActions)
 	}
+	if len(c.Menus) > MaxMenus {
+		return fmt.Errorf("too many menus (max %d)", MaxMenus)
+	}
+	if len(c.Keybindings) > MaxKeybindings {
+		return fmt.Errorf("too many keybindings (max %d)", MaxKeybindings)
+	}
 	if len(c.Languages) > MaxLanguages {
 		return fmt.Errorf("too many languages (max %d)", MaxLanguages)
 	}
@@ -315,7 +350,53 @@ func Validate(m *Manifest) error {
 		if strings.TrimSpace(cmd.Title) == "" || len(cmd.Title) > 120 {
 			return fmt.Errorf("command %q title is required", cmd.ID)
 		}
+		if len(cmd.Category) > 60 {
+			return fmt.Errorf("command %q category is too long", cmd.ID)
+		}
 		commands[cmd.ID] = true
+	}
+
+	menuIDs := make(map[string]bool, len(c.Menus))
+	menuItems := 0
+	for i := range c.Menus {
+		menu := &c.Menus[i]
+		if !idPattern.MatchString(menu.ID) || len(menu.ID) > 40 {
+			return fmt.Errorf("menu %q id must be a lowercase identifier", menu.ID)
+		}
+		if menuIDs[menu.ID] {
+			return fmt.Errorf("duplicate menu id %q", menu.ID)
+		}
+		if strings.TrimSpace(menu.Label) == "" || len(menu.Label) > 120 {
+			return fmt.Errorf("menu %q label is required", menu.ID)
+		}
+		for _, item := range menu.Items {
+			menuItems++
+			if menuItems > MaxMenuItems {
+				return fmt.Errorf("too many menu items (max %d)", MaxMenuItems)
+			}
+			if !commands[item.Command] {
+				return fmt.Errorf("menu %q references unknown command %q", menu.ID, item.Command)
+			}
+			if len(item.Label) > 120 || len(item.Group) > 60 {
+				return fmt.Errorf("menu %q item labels are too long", menu.ID)
+			}
+		}
+		menuIDs[menu.ID] = true
+	}
+
+	bound := make(map[string]bool, len(c.Keybindings))
+	for _, binding := range c.Keybindings {
+		if !commands[binding.Command] {
+			return fmt.Errorf("keybinding references unknown command %q", binding.Command)
+		}
+		key := strings.TrimSpace(binding.Key)
+		if key == "" || len(key) > 80 || strings.ContainsAny(key, "\r\n") {
+			return fmt.Errorf("keybinding for %q needs a valid key", binding.Command)
+		}
+		if bound[binding.Command] {
+			return fmt.Errorf("duplicate keybinding for command %q", binding.Command)
+		}
+		bound[binding.Command] = true
 	}
 
 	panels := make(map[string]bool, len(c.Panels))

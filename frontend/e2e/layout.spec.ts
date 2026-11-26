@@ -218,3 +218,46 @@ test("window management: resize, dock, split, drag, persist and reset", async ({
   await page.screenshot({ path: "test-results/layout.png", fullPage: true });
   await page.close();
 });
+
+test("command center: run commands, rebind shortcuts and curate menus", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await uiLogin(page);
+  await page.getByText(workspaceName, { exact: true }).click();
+  await expect(page.getByText("Explorer", { exact: true })).toBeVisible();
+
+  await page.keyboard.press("Control+Alt+k");
+  await expect(page.getByText("Command center", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/\d+ commands · \d+ shortcuts/)).toBeVisible();
+  await page.getByPlaceholder("Search commands by title, id, source or category…").fill("Show command palette");
+  const paletteCommand = page.locator("div.divide-y.rounded-lg.border > div").filter({ hasText: "command-palette" }).first();
+  await paletteCommand.getByRole("button", { name: "Run" }).click();
+  await expect(page.getByPlaceholder("Search files or run a command…")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+Alt+k");
+  await page.getByText("Command center", { exact: true }).first().waitFor();
+
+  await page.getByRole("button", { name: /Keybindings/ }).click();
+  await page.getByPlaceholder("Search commands to rebind…").fill("Save active file");
+  const saveRow = page.locator("div.flex.items-center.gap-3").filter({ hasText: "Save active file" }).last();
+  await saveRow.getByRole("button", { name: /Ctrl\+S|⌘S/ }).click();
+  await page.keyboard.press("Control+Shift+s");
+  await expect(saveRow.getByRole("button", { name: /Ctrl\+Shift\+S|⇧⌘S/ })).toBeVisible();
+
+  await page.getByRole("button", { name: /^Menus/ }).click();
+  const viewSection = page.locator('section[data-menu-id="view"]');
+  const explorerRow = viewSection.locator('[data-menu-item="show-explorer"]');
+  await explorerRow.getByTitle("Hide item").click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "View menu" }).click();
+  await expect(page.getByRole("menuitem", { name: /Show explorer/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.press("Control+Alt+k");
+  await page.getByRole("button", { name: /^Menus/ }).click();
+  await page.getByRole("button", { name: /Reset menus/ }).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "View menu" }).click();
+  await expect(page.getByRole("menuitem", { name: /Show explorer/ })).toBeVisible();
+  await page.close();
+});

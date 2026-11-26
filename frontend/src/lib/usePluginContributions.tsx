@@ -4,6 +4,8 @@ import { pluginIcon } from "./plugin-icons";
 import { toast } from "sonner";
 import { ApiError } from "./api";
 import type { PaletteAction } from "@/components/editor/paletteTypes";
+import type { PluginKeybindingContribution } from "./commands";
+import type { PluginMenuContribution } from "./menus";
 import type { SideView } from "./layout";
 import { pluginLspSocket } from "./plugin-api";
 import type { WorkspacePlugin } from "./plugin-types";
@@ -57,23 +59,64 @@ export function usePluginContributions(workspaceId: string, activePath: string, 
       )
     : [];
 
+  const pluginKeybindings: PluginKeybindingContribution[] = runtime.enabled.flatMap((plugin) =>
+    (plugin.manifest?.contributes.keybindings ?? []).map((binding) => ({
+      pluginId: plugin.id,
+      pluginName: plugin.name,
+      commandId: `plugin:${plugin.id}:${binding.command}`,
+      key: binding.key,
+    })),
+  );
+
+  const pluginMenus: PluginMenuContribution[] = runtime.enabled.flatMap((plugin) =>
+    (plugin.manifest?.contributes.menus ?? []).flatMap((menu) =>
+      menu.items.map((item) => ({
+        pluginId: plugin.id,
+        pluginName: plugin.name,
+        menuId: menu.id,
+        label: menu.label,
+        commandId: `plugin:${plugin.id}:${item.command}`,
+        group: item.group,
+      })),
+    ),
+  );
+
   const pluginPaletteActions: PaletteAction[] = [
     ...runtime.enabled.flatMap((plugin) =>
-      (plugin.manifest?.contributes.commands ?? []).map((command) => ({
-        id: `plugin:${plugin.id}:${command.id}`,
-        label: `${plugin.name}: ${command.title}`,
-        description: command.description,
-        icon: pluginIcon(plugin.manifest?.icon, "h-3.5 w-3.5"),
-        run: () => runPluginCommand(plugin, command.id),
-      })),
+      (plugin.manifest?.contributes.commands ?? []).map((command) => {
+        const commandId = `plugin:${plugin.id}:${command.id}`;
+        const prefix = `${plugin.name}: `;
+        return {
+          id: commandId,
+          label: command.title.startsWith(prefix) ? command.title : `${prefix}${command.title}`,
+          description: command.description,
+          category: command.category || "Plugins",
+          source: plugin.name,
+          defaultKey: pluginKeybindings.find((binding) => binding.commandId === commandId)?.key,
+          icon: pluginIcon(plugin.manifest?.icon, "h-3.5 w-3.5"),
+          run: () => runPluginCommand(plugin, command.id),
+        };
+      }),
     ),
     ...pluginEditorActions.map((action) => ({
       id: `editor:${action.id}`,
       label: action.title,
+      description: "Plugin editor action",
+      category: "Plugins",
+      source: action.title.split(":")[0] || "Plugin",
       icon: <Puzzle className="h-3.5 w-3.5" />,
       run: action.onSelect,
     })),
   ];
 
-  return { ...runtime, runPluginCommand, pluginPanels, pluginEditorActions, pluginPaletteActions, lspSocket: pluginLspSocket };
+  return {
+    ...runtime,
+    runPluginCommand,
+    pluginPanels,
+    pluginEditorActions,
+    pluginPaletteActions,
+    pluginKeybindings,
+    pluginMenus,
+    lspSocket: pluginLspSocket,
+  };
 }

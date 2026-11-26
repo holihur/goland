@@ -127,6 +127,25 @@
         "title": "Format with Demo",
         "command": "demo.format"
       }
+    ],
+    "keybindings": [
+      {
+        "command": "demo.plugin.hello",
+        "key": "Mod+Alt+H"
+      }
+    ],
+    "menus": [
+      {
+        "id": "tools",
+        "label": "Tools",
+        "items": [
+          {
+            "command": "demo.plugin.hello",
+            "label": "Say hello",
+            "group": "Demo Toolkit"
+          }
+        ]
+      }
     ]
   },
   "icon": "sparkles"

@@ -22,7 +22,25 @@ export interface PluginCommand {
   id: string;
   title: string;
   description?: string;
+  category?: string;
   args?: string[];
+}
+
+export interface PluginKeybinding {
+  command: string;
+  key: string;
+}
+
+export interface PluginMenuItem {
+  command: string;
+  label?: string;
+  group?: string;
+}
+
+export interface PluginMenu {
+  id: string;
+  label: string;
+  items: PluginMenuItem[];
 }
 
 export interface PluginPanelAction {
@@ -97,6 +115,8 @@ export interface PluginContributions {
     postPull?: PluginHook;
   };
   editorActions?: PluginEditorAction[];
+  keybindings?: PluginKeybinding[];
+  menus?: PluginMenu[];
   languages?: PluginLanguage[];
   debuggers?: PluginDebugger[];
   frontends?: PluginFrontend[];

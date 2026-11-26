@@ -12,16 +12,25 @@ export function CommandPalette({
   workspaceId,
   onOpenFile,
   actions,
+  shortcuts,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workspaceId: string;
   onOpenFile: (path: string) => void;
   actions: PaletteAction[];
+  shortcuts?: Record<string, string>;
 }) {
   const [query, setQuery] = useState("");
   const [files, setFiles] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
+  const needle = query.trim().toLowerCase();
+  const filteredActions = actions.filter((action) =>
+    !needle ||
+    `${action.label} ${action.id} ${action.description ?? ""} ${action.category ?? ""} ${action.source ?? ""}`
+      .toLowerCase()
+      .includes(needle),
+  );
 
   useEffect(() => {
     if (!open) {
@@ -86,23 +95,31 @@ export function CommandPalette({
                 ))}
               </Command.Group>
             )}
-            {!query.trim() && (
-              <Command.Group heading="Workspace" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground">
-                {actions.map((action) => (
-                  <Command.Item
-                    key={action.id}
-                    value={action.id}
-                    onSelect={() => {
-                      action.run();
-                      onOpenChange(false);
-                    }}
-                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs aria-selected:bg-accent aria-selected:text-accent-foreground"
-                  >
-                    {action.icon}
-                    <span>{action.label}</span>
-                    {action.hint && <span className="ml-auto font-code text-[10px] text-muted-foreground">{action.hint}</span>}
-                  </Command.Item>
-                ))}
+            {filteredActions.length > 0 && (
+              <Command.Group heading="Commands" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground">
+                {filteredActions.map((action) => {
+                  const shortcut = shortcuts?.[action.id] ?? action.hint;
+                  return (
+                    <Command.Item
+                      key={action.id}
+                      value={action.id}
+                      onSelect={() => {
+                        action.run();
+                        onOpenChange(false);
+                      }}
+                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs aria-selected:bg-accent aria-selected:text-accent-foreground"
+                    >
+                      {action.icon}
+                      <span className="truncate">{action.label}</span>
+                      {action.source && action.source !== "Goland" && (
+                        <span className="shrink-0 rounded border px-1 text-[8px] text-muted-foreground">{action.source}</span>
+                      )}
+                      {shortcut && (
+                        <span className="ml-auto shrink-0 font-code text-[10px] text-muted-foreground">{shortcut}</span>
+                      )}
+                    </Command.Item>
+                  );
+                })}
               </Command.Group>
             )}
           </Command.List>

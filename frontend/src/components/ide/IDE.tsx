@@ -25,11 +25,11 @@ import { PluginSidebarPanel } from "@/components/plugins/PluginSidebarPanel";
 import { IdeFooter } from "./IdeFooter";
 import { buildPaletteActions } from "./paletteActions";
 import { EditorPane } from "./EditorPane";
-import { ByokDialog, CommandPalette, DebugPanel, GitPanel, OutlinePanel, SearchPanel, SettingsDialog, TokenDialog } from "./lazyViews";
+import { ByokDialog, CommandPalette, DebugPanel, GitPanel, ManagerDialog, OutlinePanel, SearchPanel, SettingsDialog, TokenDialog } from "./lazyViews";
+import { useCommandSystem } from "@/lib/useCommandSystem";
 import {
   DEFAULT_BOTTOM_HEIGHT,
   DEFAULT_SIDEBAR_WIDTH,
-  activeGroupIdOf,
   groupOfPath,
   type SplitDirection,
 } from "@/lib/layout";
@@ -83,12 +83,18 @@ export function IDE({
   const terminalOpen = layout.bottomOpen;
   const bottomView = layout.bottomView;
   const initialLayoutRef = useRef(layout);
+  const pluginView = view.startsWith("plugin:");
+  useEffect(() => {
+    if (!pluginView || compact) return;
+    if (layout.sidebarWidth < 420) setSidebarWidth(Math.min(460, sidebarMax));
+  }, [pluginView, compact, layout.sidebarWidth, sidebarMax, setSidebarWidth]);
   const [treeKey, setTreeKey] = useState(0);
   const [gitKey, setGitKey] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
   const [byokOpen, setByokOpen] = useState(false);
+  const [managersOpen, setManagersOpen] = useState(false);
   const [saving, setSaving] = useState("");
   const [diagnostics, setDiagnostics] = useState<Record<string, Diagnostic[]>>({});
   const [cursorLine, setCursorLine] = useState(1);
@@ -373,63 +379,6 @@ export function IDE({
     [tabs, saving, workspace.id, onWorkspaceChanged, user.id],
   );
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const mod = event.metaKey || event.ctrlKey;
-      if (mod && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        if (activePath) void saveTab(activePath);
-      } else if (mod && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setPaletteOpen(true);
-      } else if (mod && event.key === "`") {
-        event.preventDefault();
-        toggleBottom();
-      } else if (mod && event.key.toLowerCase() === "b") {
-        event.preventDefault();
-        toggleSidebar();
-      } else if (mod && event.altKey && event.code === "Backslash") {
-        event.preventDefault();
-        if (layout.rows.flat().length > 1) closeEditorGroup(activeGroupIdOf(layout));
-      } else if (mod && event.altKey && event.key === "0") {
-        event.preventDefault();
-        reset(tabs.map((tab) => tab.path), activePath);
-      } else if (mod && event.shiftKey && event.code === "Backslash") {
-        event.preventDefault();
-        if (!compact) split("down");
-      } else if (mod && event.code === "Backslash") {
-        event.preventDefault();
-        if (!compact) split("right");
-      } else if (event.key === "F5") {
-        event.preventDefault();
-        showSideView("debug");
-      } else if (event.key === "F9") {
-        event.preventDefault();
-        if (activePath) toggleBreakpoint(activePath, cursorLine);
-      } else if (event.key === "F2") {
-        event.preventDefault();
-        void renameSymbol();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    activePath,
-    saveTab,
-    cursorLine,
-    toggleBreakpoint,
-    layout,
-    tabs,
-    compact,
-    toggleBottom,
-    toggleSidebar,
-    closeEditorGroup,
-    reset,
-    split,
-    showSideView,
-    renameSymbol,
-  ]);
-
   const openLocation = useCallback(
     async (location: SourceLocation) => {
       await openFile(location.path);
@@ -474,20 +423,39 @@ export function IDE({
 
   const paletteActions = buildPaletteActions({
     activePath,
+    cursorLine,
     layout,
     tabs,
     compact,
     saveTab: (path) => void saveTab(path),
+    closeTab,
+    toggleSidebar,
     toggleBottom,
     openBottom,
     showSideView,
+    openPalette: () => setPaletteOpen(true),
+    openManagers: () => setManagersOpen(true),
+    openSettings: () => setSettingsOpen(true),
+    openTokens: () => setTokensOpen(true),
+    openByok: () => setByokOpen(true),
     goToWorkspaceSymbol: () => void goToWorkspaceSymbol(),
+    renameSymbol: () => void renameSymbol(),
+    toggleBreakpoint,
     split,
     closeEditorGroup,
     setBottomMaximized,
     reset,
     pluginActions: plugins.pluginPaletteActions,
   });
+
+  const commandSystem = useCommandSystem({
+    userId: user.id,
+    actions: paletteActions,
+    pluginKeybindings: plugins.pluginKeybindings,
+    pluginMenus: plugins.pluginMenus,
+    disabled: managersOpen,
+  });
+  const { commands, keybindings, shortcuts, runCommand, fullMenus, menus, menuPreferences } = commandSystem;
 
   const renderEditor = (path: string) => (
     <EditorPane
@@ -528,6 +496,11 @@ export function IDE({
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenTokens={() => setTokensOpen(true)}
           onOpenByok={() => setByokOpen(true)}
+          menus={menus}
+          commands={commands}
+          shortcuts={shortcuts}
+          onRunCommand={runCommand}
+          onOpenManagers={() => setManagersOpen(true)}
         />
 
         <div className="relative flex min-h-0 flex-1">
@@ -622,6 +595,7 @@ export function IDE({
                 plugins={plugins.enabled}
                 panels={plugins.panels}
                 outputs={plugins.outputs}
+                status={plugins.status}
                 execute={plugins.execute}
                 cancel={plugins.cancel}
                 onConfigure={() => showSideView("settings")}
@@ -780,6 +754,30 @@ export function IDE({
             workspaceId={workspace.id}
             onOpenFile={openFile}
             actions={paletteActions}
+            shortcuts={shortcuts}
+          />
+        </Suspense>
+      )}
+
+      {managersOpen && (
+        <Suspense fallback={null}>
+          <ManagerDialog
+            open
+            onOpenChange={setManagersOpen}
+            commands={commands}
+            bindings={keybindings.bindings}
+            defaults={keybindings.defaults}
+            overrides={keybindings.overrides}
+            conflicts={keybindings.conflicts}
+            menus={fullMenus}
+            menuPreferences={menuPreferences}
+            onRunCommand={runCommand}
+            onSetBinding={keybindings.setBinding}
+            onResetBinding={keybindings.resetBinding}
+            onResetAllBindings={keybindings.resetAll}
+            onToggleMenuItem={commandSystem.toggleMenuItem}
+            onMoveMenuItem={(menu, itemId, direction) => commandSystem.moveMenuItem(menu.id, itemId, direction)}
+            onResetMenus={commandSystem.resetMenus}
           />
         </Suspense>
       )}

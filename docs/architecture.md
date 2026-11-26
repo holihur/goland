@@ -100,10 +100,41 @@ Plugin errors follow the manifest `failure` policy (`open` skips, `closed` block
 Plugins may declare `contributes.frontends` entries whose `entry` is a `.js`/`.mjs` ES module.
 The host imports the module with native `import()`, expects a default-exported custom element
 class, defines it, and mounts it in the sidebar after setting an `api` property. The API exposes
-workspace metadata, theme/language, command execution, notifications and file opening. Plugins
-should use Shadow DOM for style isolation. This is native page code, not an iframe; only
-administrator-installed plugins can contribute it, and they are trusted with the user's page
-privileges.
+workspace metadata, theme/language, command execution, cancellation, notifications, file opening
+and a `configure()` action that opens the plugin settings panel. Plugins should use Shadow DOM
+for style isolation. This is native page code, not an iframe; only administrator-installed
+plugins can contribute it, and they are trusted with the user's page privileges.
+
+First-party plugins share the host-served `/plugin-ui.js` kit: theme-aware tokens, form and
+action primitives, a streaming output console, keyboard shortcuts, error banners and persisted
+inputs. The kit is loaded from the same origin as the SPA and is not bundled into each plugin,
+so the host can improve the console design without repackaging every plugin. Plugin views are
+widened automatically when opened and remain responsive down to the mobile overlay width.
+
+### Commands, menus and keybindings
+
+The IDE has a single command registry assembled from built-in palette actions and every enabled
+plugin command. `useCommandSystem` resolves default shortcuts, plugin `contributes.keybindings`
+entries and per-user overrides, detects conflicts, and dispatches global keydown events through
+the same command objects used by the command palette. Built-in defaults cover save, terminal,
+sidebar, explorer/search/outline/Git, testing, debugging, breakpoints, rename, split, reset and
+the command palette.
+
+The command center is a dedicated configuration window opened from the Help menu, the account
+menu or `Mod+Alt+K`. It has three sections:
+
+- **Commands** — search all built-in/plugin commands, inspect ids, sources, categories and
+  current shortcuts, and run a command directly.
+- **Keybindings** — record a new shortcut, unbind with Backspace/Delete, see conflict warnings
+  and defaults, reset one or all bindings.
+- **Menus** — toggle menu entries and reorder them. Preferences are persisted per user.
+
+Plugins can contribute `menus` entries (`{ id, label, items: [{ command, label?, group? }] }`)
+and `keybindings` (`{ command, key }`). Unknown menu ids create a plugin menu; plugin commands
+that are not placed explicitly are grouped under **Tools**. The manifest validator checks that
+all menu/keybinding commands exist, enforces limits and rejects duplicate menu/keybinding ids.
+Command/menu/shortcut preferences are stored in browser localStorage per user and never grant
+additional backend permissions.
 
 ### Editor, language and debugger integration
 

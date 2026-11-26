@@ -23,6 +23,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { CommandDescriptor } from "@/lib/commands";
+import type { MenuDefinition } from "@/lib/menus";
+import { MenuBar } from "./MenuBar";
 
 export function IdeHeader({
   workspace,
@@ -37,6 +40,11 @@ export function IdeHeader({
   onOpenSettings,
   onOpenTokens,
   onOpenByok,
+  menus,
+  commands,
+  shortcuts,
+  onRunCommand,
+  onOpenManagers,
 }: {
   workspace: Workspace;
   user: User;
@@ -50,6 +58,11 @@ export function IdeHeader({
   onOpenSettings: () => void;
   onOpenTokens: () => void;
   onOpenByok: () => void;
+  menus: MenuDefinition[];
+  commands: CommandDescriptor[];
+  shortcuts: Record<string, string>;
+  onRunCommand: (commandId: string) => void;
+  onOpenManagers: () => void;
 }) {
   const { t } = useI18n();
   return (
@@ -71,6 +84,7 @@ export function IdeHeader({
           </span>
         )}
       </div>
+      <MenuBar menus={menus} commands={commands} bindings={shortcuts} onRunCommand={onRunCommand} />
 
       <div className="ml-auto flex items-center gap-1">
         <button
@@ -138,6 +152,9 @@ export function IdeHeader({
               <div className="mt-0.5 truncate text-[10px] font-normal">{user.email}</div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onOpenManagers}>
+              <CommandIcon className="h-4 w-4" /> Command center
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={onShowSettings}>
               <Settings2 className="h-4 w-4" /> Workspace info
             </DropdownMenuItem>

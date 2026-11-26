@@ -43,6 +43,11 @@ func validManifest() *Manifest {
 				PreCommit: &Hook{Command: "demo.plugin.hello", Failure: "closed"},
 			},
 			EditorActions: []EditorAction{{ID: "demo.plugin.action", Title: "Demo action", Command: "demo.plugin.hello"}},
+			Menus: []Menu{{
+				ID: "tools", Label: "Tools",
+				Items: []MenuItem{{Command: "demo.plugin.hello", Label: "Say hello", Group: "Demo"}},
+			}},
+			Keybindings: []Keybinding{{Command: "demo.plugin.hello", Key: "Mod+Alt+X"}},
 			Languages: []Language{{
 				ID: "demo.plugin.lang", Extensions: []string{".demo"}, LanguageID: "demo",
 				Server: Server{Command: "bin/lsp"},
@@ -145,6 +150,27 @@ func TestValidateManifestFields(t *testing.T) {
 		},
 		"editor action title": func(m *Manifest) {
 			m.Contributes.EditorActions[0].Title = ""
+		},
+		"menu unknown command": func(m *Manifest) {
+			m.Contributes.Menus[0].Items[0].Command = "demo.plugin.missing"
+		},
+		"menu bad id": func(m *Manifest) {
+			m.Contributes.Menus[0].ID = "Tools Menu"
+		},
+		"menu missing label": func(m *Manifest) {
+			m.Contributes.Menus[0].Label = ""
+		},
+		"duplicate menu": func(m *Manifest) {
+			m.Contributes.Menus = append(m.Contributes.Menus, m.Contributes.Menus[0])
+		},
+		"keybinding unknown command": func(m *Manifest) {
+			m.Contributes.Keybindings[0].Command = "demo.plugin.missing"
+		},
+		"keybinding empty key": func(m *Manifest) {
+			m.Contributes.Keybindings[0].Key = " "
+		},
+		"duplicate keybinding": func(m *Manifest) {
+			m.Contributes.Keybindings = append(m.Contributes.Keybindings, m.Contributes.Keybindings[0])
 		},
 		"hook unknown command": func(m *Manifest) {
 			m.Contributes.Hooks.OnSave.Command = "demo.plugin.missing"

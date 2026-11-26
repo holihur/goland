@@ -24,3 +24,6 @@ export const OutlinePanel = lazy(() =>
 export const GitPanel = lazy(() =>
   import("@/components/editor/GitPanel").then((module) => ({ default: module.GitPanel })),
 );
+export const ManagerDialog = lazy(() =>
+  import("./ManagerDialog").then((module) => ({ default: module.ManagerDialog })),
+);

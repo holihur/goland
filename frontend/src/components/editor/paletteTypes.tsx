@@ -5,6 +5,11 @@ export interface PaletteAction {
   id: string;
   label: string;
   hint?: string;
+  description?: string;
+  category?: string;
+  source?: string;
+  defaultKey?: string;
+  keywords?: string[];
   icon?: ReactNode;
   run: () => void;
 }
