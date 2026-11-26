@@ -3,6 +3,7 @@ import {
   ChevronRight,
   File,
   FileCode2,
+  FileImage,
   FileJson,
   FilePlus2,
   FileText,
@@ -33,6 +34,8 @@ function FileIcon({ name, className }: { name: string; className?: string }) {
   if (lower.endsWith(".js") || lower.endsWith(".jsx")) return <FileCode2 className={cn("text-yellow-300", className)} />;
   if (lower.endsWith(".json")) return <FileJson className={cn("text-amber-300", className)} />;
   if (lower.endsWith(".md")) return <FileText className={cn("text-muted-foreground", className)} />;
+  if (/\.(png|jpe?g|gif|webp|bmp|ico|svg|avif|tiff?)$/.test(lower)) return <FileImage className={cn("text-emerald-400", className)} />;
+  if (lower.endsWith(".pdf")) return <FileText className={cn("text-red-400", className)} />;
   return <File className={cn("text-muted-foreground", className)} />;
 }
 

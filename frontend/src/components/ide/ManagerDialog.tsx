@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Keyboard, Menu, Terminal } from "lucide-react";
+import { Files, Keyboard, Menu, Terminal } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { CommandDescriptor } from "@/lib/commands";
 import type { MenuDefinition, MenuPreferences } from "@/lib/menus";
@@ -7,13 +7,16 @@ import { cn } from "@/lib/utils";
 import { CommandManager } from "./CommandManager";
 import { KeybindingManager } from "./KeybindingManager";
 import { MenuManager } from "./MenuManager";
+import { FileAssociationManager } from "./FileAssociationManager";
+import type { FileAssociationOverrides, ViewerKind } from "@/lib/fileAssociations";
 
-type ManagerTab = "commands" | "keybindings" | "menus";
+type ManagerTab = "commands" | "keybindings" | "menus" | "files";
 
 const TABS: Array<{ id: ManagerTab; label: string; icon: typeof Terminal; description: string }> = [
   { id: "commands", label: "Commands", icon: Terminal, description: "Browse and run every command" },
   { id: "keybindings", label: "Keybindings", icon: Keyboard, description: "Assign and resolve shortcuts" },
   { id: "menus", label: "Menus", icon: Menu, description: "Organize menu entries" },
+  { id: "files", label: "Files", icon: Files, description: "Choose viewers for file types" },
 ];
 
 export function ManagerDialog({
@@ -26,6 +29,10 @@ export function ManagerDialog({
   conflicts,
   menus,
   menuPreferences,
+  fileAssociations,
+  onSetFileAssociation,
+  onRemoveFileAssociation,
+  onResetFileAssociations,
   onRunCommand,
   onSetBinding,
   onResetBinding,
@@ -43,6 +50,10 @@ export function ManagerDialog({
   conflicts: Record<string, string[]>;
   menus: MenuDefinition[];
   menuPreferences: MenuPreferences;
+  fileAssociations: FileAssociationOverrides;
+  onSetFileAssociation: (target: string, viewer: ViewerKind) => void;
+  onRemoveFileAssociation: (target: string) => void;
+  onResetFileAssociations: () => void;
   onRunCommand: (commandId: string) => void;
   onSetBinding: (commandId: string, value: string) => void;
   onResetBinding: (commandId: string) => void;
@@ -67,7 +78,7 @@ export function ManagerDialog({
           <div className="min-w-0">
             <div className="text-sm font-semibold tracking-tight">Command center</div>
             <div className="text-[10px] text-muted-foreground">
-              {commands.length} commands · {Object.keys(bindings).length} shortcuts · {menus.length} menus
+              {commands.length} commands · {Object.keys(bindings).length} shortcuts · {Object.keys(fileAssociations).length} file rules
             </div>
           </div>
         </header>
@@ -128,6 +139,14 @@ export function ManagerDialog({
                 onToggle={onToggleMenuItem}
                 onMove={onMoveMenuItem}
                 onReset={onResetMenus}
+              />
+            )}
+            {tab === "files" && (
+              <FileAssociationManager
+                overrides={fileAssociations}
+                onSet={onSetFileAssociation}
+                onRemove={onRemoveFileAssociation}
+                onReset={onResetFileAssociations}
               />
             )}
           </main>

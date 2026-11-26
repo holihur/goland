@@ -24,6 +24,7 @@ export interface EditorTab {
   etag?: string;
   binary: boolean;
   dirty: boolean;
+  viewer?: "code" | "image" | "pdf";
 }
 
 const DRAG_THRESHOLD = 6;

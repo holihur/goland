@@ -107,6 +107,7 @@ func New(cfg *config.Config, st *store.Store, am *auth.Manager, wm *workspace.Ma
 				one.Delete("/", s.deleteWorkspace)
 				one.Get("/tree", s.listTree)
 				one.Get("/file", s.readFile)
+				one.Get("/raw", s.rawFile)
 				one.Put("/file", s.writeFile)
 				one.Post("/entry", s.createEntry)
 				one.Post("/rename", s.renameEntry)

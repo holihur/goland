@@ -28,12 +28,22 @@ function LoadingScreen({ label }: { label: string }) {
 
 type Phase = "loading" | "login" | "ready";
 
+function parseRoute(hash: string): { workspaceID: string; file: string } {
+  const raw = hash.replace(/^#\/?/, "");
+  const separator = raw.indexOf("?");
+  const workspaceID = separator >= 0 ? raw.slice(0, separator) : raw;
+  const file = separator >= 0 ? new URLSearchParams(raw.slice(separator + 1)).get("file") ?? "" : "";
+  return { workspaceID, file };
+}
+
 export default function App() {
   const { t } = useI18n();
   const [phase, setPhase] = useState<Phase>("loading");
   const [user, setUser] = useState<User | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [selectedID, setSelectedID] = useState<string>(() => window.location.hash.replace(/^#\/?/, ""));
+  const initialRoute = parseRoute(window.location.hash);
+  const [selectedID, setSelectedID] = useState<string>(initialRoute.workspaceID);
+  const [selectedFile, setSelectedFile] = useState<string>(initialRoute.file);
   const [mfaSetupRequired, setMfaSetupRequired] = useState(false);
 
   const loadWorkspaces = useCallback(async () => {
@@ -67,7 +77,11 @@ export default function App() {
       setUser(null);
       setPhase("login");
     };
-    const onHash = () => setSelectedID(window.location.hash.replace(/^#\/?/, ""));
+    const onHash = () => {
+      const route = parseRoute(window.location.hash);
+      setSelectedID(route.workspaceID);
+      setSelectedFile(route.file);
+    };
     window.addEventListener("goland:unauthorized", onUnauthorized);
     window.addEventListener("hashchange", onHash);
     return () => {
@@ -75,6 +89,15 @@ export default function App() {
       window.removeEventListener("hashchange", onHash);
     };
   }, []);
+
+  const updateFileURL = useCallback(
+    (file?: string) => {
+      const next = file ? `#/${selectedID}?file=${encodeURIComponent(file)}` : `#/${selectedID}`;
+      setSelectedFile(file ?? "");
+      if (window.location.hash !== next) window.history.replaceState(null, "", next);
+    },
+    [selectedID],
+  );
 
   const logout = async () => {
     try {
@@ -136,9 +159,12 @@ export default function App() {
           key={selected.id}
           user={user}
           workspace={selected}
+          initialFile={selectedFile}
+          onFileChange={updateFileURL}
           onExit={() => {
             window.location.hash = "";
             setSelectedID("");
+            setSelectedFile("");
             void loadWorkspaces();
           }}
           onWorkspaceChanged={() => void loadWorkspaces()}
@@ -155,6 +181,7 @@ export default function App() {
         onOpen={(workspace) => {
           window.location.hash = `/${workspace.id}`;
           setSelectedID(workspace.id);
+          setSelectedFile("");
         }}
         onRefresh={loadWorkspaces}
         onLogout={logout}

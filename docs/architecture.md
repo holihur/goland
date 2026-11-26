@@ -146,6 +146,20 @@ select) from the manifest. `LSPClient` and `DAPClient` accept a plugin-provided 
 URL, so plugin languages and debugger kinds reuse the existing diagnostics, completion,
 breakpoint, stack and variable code.
 
+### File associations and viewers
+
+`fileAssociations.ts` resolves a path through user overrides (`.svg`, `Dockerfile`, …),
+then falls back to built-in image/PDF extension groups and finally the code editor. The
+Command Center exposes a Files tab for adding, changing and removing rules; preferences are
+stored per user. Image and PDF files are opened as lightweight tabs without loading their
+bytes through the text API. `GET /api/workspaces/{id}/raw?path=…` streams the file with
+workspace isolation and range support; PDF responses allow same-origin framing while all other
+responses retain the normal deny-by-default CSP.
+
+The IDE keeps the active file path in the URL hash (`#/<workspace>?file=<path>`). A reload or
+shared link restores the workspace and opens that file, while tab/layout persistence remains
+in localStorage.
+
 ### Security boundary
 
 Plugins are trusted code running as the workspace Unix user. The host controls UID, cwd,

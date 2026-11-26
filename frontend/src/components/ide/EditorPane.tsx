@@ -1,5 +1,7 @@
 import { lazy, Suspense } from "react";
 import { FileCode2 } from "lucide-react";
+import { ImageViewer } from "@/components/editor/ImageViewer";
+import { PdfViewer } from "@/components/editor/PdfViewer";
 import type { Diagnostic } from "@/lib/types";
 import type { LSPClient, SourceLocation } from "@/lib/lsp";
 import type { EditorTab } from "./EditorGroups";
@@ -7,6 +9,7 @@ import type { EditorTab } from "./EditorGroups";
 const CodeEditor = lazy(() => import("@/components/editor/CodeEditor").then((module) => ({ default: module.CodeEditor })));
 
 export function EditorPane({
+  workspaceId,
   path,
   tabs,
   diagnostics,
@@ -21,6 +24,7 @@ export function EditorPane({
   rememberScroll,
   viewStateRef,
 }: {
+  workspaceId: string;
   path: string;
   tabs: EditorTab[];
   diagnostics: Record<string, Diagnostic[]>;
@@ -37,6 +41,12 @@ export function EditorPane({
 }) {
   const tab = tabs.find((item) => item.path === path);
   if (!tab) return null;
+  if (tab.viewer === "image") {
+    return <ImageViewer workspaceId={workspaceId} path={tab.path} name={tab.name} />;
+  }
+  if (tab.viewer === "pdf") {
+    return <PdfViewer workspaceId={workspaceId} path={tab.path} name={tab.name} />;
+  }
   if (tab.binary) {
     return (
       <div className="grid h-full place-items-center">

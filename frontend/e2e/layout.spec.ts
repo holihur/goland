@@ -261,6 +261,15 @@ test("command center: run commands, rebind shortcuts and curate menus", async ({
   await expect(page.getByRole("menuitem", { name: /Show explorer/ })).toBeVisible();
   await page.keyboard.press("Escape");
 
+  await page.keyboard.press("Control+Alt+k");
+  await page.getByRole("button", { name: /^Files/ }).click();
+  await page.getByPlaceholder(".foo or Dockerfile").fill(".foo");
+  await page.getByRole("button", { name: /Add rule/ }).click();
+  await expect(page.getByText(".foo", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Reset rules/ }).click();
+  await expect(page.getByText(".foo", { exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
   await page.getByRole("button", { name: "View menu" }).click();
   await page.getByRole("menuitem", { name: /Move sidebar to right/ }).click();
   await expect.poll(async () => (await page.getByTestId("sidebar").boundingBox())?.x ?? 0).toBeGreaterThan(800);
@@ -272,5 +281,20 @@ test("command center: run commands, rebind shortcuts and curate menus", async ({
   await page.getByRole("menuitem", { name: /Move sidebar to bottom/ }).click();
   await expect.poll(async () => (await page.getByTestId("sidebar").boundingBox())?.y ?? 0).toBeGreaterThan(400);
   await expect.poll(async () => (await page.getByTestId("sidebar").boundingBox())?.width ?? 0).toBeGreaterThan(800);
+  await page.close();
+});
+
+
+test("open file path persists in the URL across reload", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await uiLogin(page);
+  await page.getByText(workspaceName, { exact: true }).click();
+  await expect(page.getByText("Explorer", { exact: true })).toBeVisible();
+  await page.getByTestId("sidebar").getByText("one.go", { exact: true }).click();
+  await expect.poll(() => new URL(page.url()).hash).toContain("file=one.go");
+  await page.reload();
+  await expect(page.locator('[role="tab"]', { hasText: "one.go" })).toBeVisible({ timeout: 30_000 });
+  expect(new URL(page.url()).hash).toContain("file=one.go");
   await page.close();
 });

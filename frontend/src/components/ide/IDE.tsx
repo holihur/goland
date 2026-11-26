@@ -17,6 +17,9 @@ import { useDrafts } from "@/lib/useDrafts";
 import { useLSPActions } from "@/lib/useLSPActions";
 import { useTaskRunner } from "@/lib/useTaskRunner";
 import { useEditorViewState } from "@/lib/useEditorViewState";
+import { useFileURL } from "@/lib/useFileURL";
+import { useFileAssociations } from "@/lib/useFileAssociations";
+import { useRestoreTabs } from "@/lib/useRestoreTabs";
 import { useBreakpoints } from "@/lib/useBreakpoints";
 import { usePluginContributions } from "@/lib/usePluginContributions";
 import { pluginLspSocket } from "@/lib/plugin-api";
@@ -38,17 +41,22 @@ import {
 export function IDE({
   user,
   workspace,
+  initialFile = "",
+  onFileChange,
   onExit,
   onWorkspaceChanged,
 }: {
   user: User;
   workspace: Workspace;
+  initialFile?: string;
+  onFileChange?: (path?: string) => void;
   onExit: () => void;
   onWorkspaceChanged: () => void;
 }) {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+
   const {
     layout,
     compact,
@@ -85,7 +93,6 @@ export function IDE({
   const sidebarOpen = layout.sidebarOpen;
   const terminalOpen = layout.bottomOpen;
   const bottomView = layout.bottomView;
-  const initialLayoutRef = useRef(layout);
   const [treeKey, setTreeKey] = useState(0);
   const [gitKey, setGitKey] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -111,6 +118,18 @@ export function IDE({
 
   const activeTab = tabs.find((tab) => tab.path === activePath) ?? null;
   const draftForFile = useDrafts(user.id, workspace.id, tabs, tabsRef);
+  const fileAssociations = useFileAssociations(user.id);
+  const restoredReady = useRestoreTabs({
+    workspaceId: workspace.id,
+    paths: restoredPaths,
+    layout,
+    viewerFor: fileAssociations.viewerFor,
+    draftForFile,
+    setTabs,
+    setDiagnostics,
+    unassignTab,
+    selectTab,
+  });
 
   useEffect(() => {
     return () => {
@@ -118,46 +137,6 @@ export function IDE({
       lspRef.current = {};
     };
   }, []);
-
-  useEffect(() => {
-    if (!restoredPaths.length) return;
-    let cancelled = false;
-    const restore = async () => {
-      for (const path of restoredPaths) {
-        try {
-          const file = await api.readFile(workspace.id, path);
-          if (cancelled) return;
-          const draft = draftForFile(path, file);
-          setTabs((prev) =>
-            prev.some((tab) => tab.path === path)
-              ? prev
-              : [
-                  ...prev,
-                  {
-                    path,
-                    name: path.split("/").pop() ?? path,
-                    content: draft.content,
-                    etag: draft.etag,
-                    binary: file.binary,
-                    dirty: draft.dirty,
-                  },
-                ],
-          );
-          setDiagnostics((current) => ({ ...current, [path]: current[path] ?? [] }));
-        } catch {
-          if (!cancelled) unassignTab(path);
-        }
-      }
-      const initial = initialLayoutRef.current;
-      const target = initial.groups[initial.activeGroupId]?.activePath;
-      const group = target ? groupOfPath(initial, target) : null;
-      if (!cancelled && group && target) selectTab(group, target);
-    };
-    void restore();
-    return () => {
-      cancelled = true;
-    };
-  }, [workspace.id, restoredPaths, unassignTab, selectTab, draftForFile]);
 
   const pluginLanguageForPath = (path: string) => {
     const lower = path.toLowerCase();
@@ -264,6 +243,15 @@ export function IDE({
         if (focus && group) selectTab(group, path);
         return;
       }
+      const viewer = fileAssociations.viewerFor(path);
+      if (viewer !== "code") {
+        setTabs((prev) => [
+          ...prev,
+          { path, name: path.split("/").pop() ?? path, content: "", binary: true, dirty: false, viewer },
+        ]);
+        assignTab(path);
+        return;
+      }
       try {
         const file = await api.readFile(workspace.id, path);
         const draft = draftForFile(path, file);
@@ -276,6 +264,7 @@ export function IDE({
             etag: draft.etag,
             binary: file.binary,
             dirty: draft.dirty,
+            viewer: "code",
           },
         ]);
         assignTab(path);
@@ -284,8 +273,19 @@ export function IDE({
         toast.error(err instanceof ApiError ? err.message : "Could not open file");
       }
     },
-    [tabs, workspace.id, layout, selectTab, assignTab, draftForFile, compact, setSidebarOpen],
+    [tabs, workspace.id, layout, selectTab, assignTab, draftForFile, compact, setSidebarOpen, fileAssociations],
   );
+
+  useFileURL({
+    initialFile,
+    restoredReady,
+    activePath,
+    layout,
+    tabs,
+    openFile,
+    selectTab,
+    onFileChange,
+  });
 
   const closeTab = (path: string) => {
     const index = tabs.findIndex((tab) => tab.path === path);
@@ -466,6 +466,7 @@ export function IDE({
 
   const renderEditor = (path: string) => (
     <EditorPane
+      workspaceId={workspace.id}
       path={path}
       tabs={tabs}
       diagnostics={diagnostics}
@@ -708,7 +709,6 @@ export function IDE({
               </>
             )}
           </main>
-
           {sidebarOpen && sidebarBottom && (
             <BottomSidebarDock
               compact={compact}
@@ -722,7 +722,6 @@ export function IDE({
           )}
           </div>
         </div>
-
         <IdeFooter
           workspace={workspace}
           activeTab={activeTab}
@@ -782,6 +781,10 @@ export function IDE({
             conflicts={keybindings.conflicts}
             menus={fullMenus}
             menuPreferences={menuPreferences}
+            fileAssociations={fileAssociations.overrides}
+            onSetFileAssociation={fileAssociations.setAssociation}
+            onRemoveFileAssociation={fileAssociations.removeAssociation}
+            onResetFileAssociations={fileAssociations.resetAssociations}
             onRunCommand={runCommand}
             onSetBinding={keybindings.setBinding}
             onResetBinding={keybindings.resetBinding}

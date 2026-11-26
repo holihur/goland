@@ -206,6 +206,9 @@ export const api = {
   readFile(workspaceId: string, path: string) {
     return request<FileContent>(`/api/workspaces/${workspaceId}/file${qs({ path })}`);
   },
+  rawFileUrl(workspaceId: string, path: string) {
+    return `/api/workspaces/${workspaceId}/raw${qs({ path })}`;
+  },
   writeFile(workspaceId: string, path: string, content: string, etag?: string) {
     return request<FileContent>(`/api/workspaces/${workspaceId}/file`, {
       method: "PUT",
