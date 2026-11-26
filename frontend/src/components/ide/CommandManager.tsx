@@ -43,7 +43,7 @@ export function CommandManager({
         ) : (
           <div className="divide-y rounded-lg border bg-panel/20">
             {filtered.map((command) => (
-              <div key={command.id} className="group flex items-center gap-3 px-3 py-2.5 hover:bg-accent/35">
+              <div key={command.id} data-command-id={command.id} className="group flex items-center gap-3 px-3 py-2.5 hover:bg-accent/35">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border/70 bg-background/50 text-muted-foreground">
                   {command.icon ?? <Terminal className="h-3.5 w-3.5" />}
                 </span>

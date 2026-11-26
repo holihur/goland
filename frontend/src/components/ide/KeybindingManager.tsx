@@ -93,7 +93,7 @@ export function KeybindingManager({
             const overridden = Object.prototype.hasOwnProperty.call(overrides, command.id);
             const isRecording = recording === command.id;
             return (
-              <div key={command.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent/25">
+              <div key={command.id} data-command-id={command.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent/25">
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-xs font-medium">{command.title}</span>
