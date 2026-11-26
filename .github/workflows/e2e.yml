@@ -65,7 +65,7 @@ jobs:
         run: |
           mkdir -p bin/tools
           GOBIN="$GITHUB_WORKSPACE/bin/tools" go install golang.org/x/tools/gopls@latest
-          GOBIN="$GITHUB_WORKSPACE/bin/tools" go install github.com/go-delve/delve/cmd/dlv@v1.26.3
+          GOBIN="$GITHUB_WORKSPACE/bin/tools" go install github.com/go-delve/delve/cmd/dlv@v1.27.2
           chmod -R o+rx bin/tools
           sudo chmod o+x /home/runner /home/runner/work "$GITHUB_WORKSPACE"
       - name: Build demo plugin
