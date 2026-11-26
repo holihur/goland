@@ -130,7 +130,7 @@
     ],
     "keybindings": [
       {
-        "command": "demo.plugin.hello",
+        "command": "demo.hello",
         "key": "Mod+Alt+H"
       }
     ],
@@ -140,7 +140,7 @@
         "label": "Tools",
         "items": [
           {
-            "command": "demo.plugin.hello",
+            "command": "demo.hello",
             "label": "Say hello",
             "group": "Demo Toolkit"
           }
