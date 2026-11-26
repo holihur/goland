@@ -349,10 +349,16 @@ describe("sanitizing persisted layouts", () => {
     expect(activePathOf(layout)).toBe("b.go");
   });
 
-  it("restores a right-docked sidebar and defaults invalid positions", () => {
+  it("restores docked sidebar positions and clamps its height", () => {
     const layout = sanitizeLayout({ rows: [["g1"]], groups: { g1: { paths: [] } }, sidebarPosition: "right" }, 800);
     expect(layout.sidebarPosition).toBe("right");
-    expect(sanitizeLayout({ rows: [["g1"]], groups: { g1: { paths: [] } }, sidebarPosition: "bottom" }, 800).sidebarPosition).toBe("left");
+    const bottom = sanitizeLayout(
+      { rows: [["g1"]], groups: { g1: { paths: [] } }, sidebarPosition: "bottom", sidebarHeight: 9999 },
+      800,
+    );
+    expect(bottom.sidebarPosition).toBe("bottom");
+    expect(bottom.sidebarHeight).toBe(600);
+    expect(sanitizeLayout({ rows: [["g1"]], groups: { g1: { paths: [] } }, sidebarPosition: "top" }, 800).sidebarPosition).toBe("left");
   });
 
   it("falls back when rows or groups are unusable", () => {

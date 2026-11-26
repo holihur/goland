@@ -105,7 +105,11 @@ export function useIdeLayout(userId: string, workspaceId: string) {
     setLayout((current) => updateSidebar(current, { sidebarOpen: open }));
   }, []);
 
-  const setSidebarPosition = useCallback((position: "left" | "right") => {
+  const setSidebarHeight = useCallback((height: number) => {
+    setLayout((current) => updateSidebar(current, { sidebarHeight: height }));
+  }, []);
+
+  const setSidebarPosition = useCallback((position: "left" | "bottom" | "right") => {
     setLayout((current) => updateSidebar(current, { sidebarPosition: position }));
   }, []);
 
@@ -213,12 +217,17 @@ export function useIdeLayout(userId: string, workspaceId: string) {
     previousView.current = layout.sideView;
     if (!changed || compact || !layout.sideView.startsWith("plugin:")) return;
     // Give plugin consoles room on first open, but keep user resizing intact.
-    if (layout.sidebarWidth < 420) setSidebarWidth(Math.min(460, sidebarMax));
-  }, [compact, layout.sideView, layout.sidebarWidth, sidebarMax, setSidebarWidth]);
+    if (layout.sidebarPosition === "bottom") {
+      if (layout.sidebarHeight < 300) setSidebarHeight(340);
+    } else if (layout.sidebarWidth < 420) {
+      setSidebarWidth(Math.min(460, sidebarMax));
+    }
+  }, [compact, layout.sideView, layout.sidebarPosition, layout.sidebarWidth, layout.sidebarHeight, sidebarMax, setSidebarWidth, setSidebarHeight]);
 
   const actions = useMemo(
     () => ({
       setSidebarWidth,
+      setSidebarHeight,
       setSidebarOpen,
       setSidebarPosition,
       toggleSidebarPosition,
@@ -241,6 +250,7 @@ export function useIdeLayout(userId: string, workspaceId: string) {
     }),
     [
       setSidebarWidth,
+      setSidebarHeight,
       setSidebarOpen,
       setSidebarPosition,
       toggleSidebarPosition,
@@ -268,7 +278,9 @@ export function useIdeLayout(userId: string, workspaceId: string) {
     viewport,
     compact,
     sidebarRight: layout.sidebarPosition === "right",
+    sidebarBottom: layout.sidebarPosition === "bottom",
     sidebarMax,
+    maxSidebarHeight: Math.max(120, Math.round(viewport.height * 0.65)),
     maxBottomHeight: Math.max(120, Math.round(viewport.height * 0.7)),
     restoredPaths,
     activePath: activePathOf(layout),

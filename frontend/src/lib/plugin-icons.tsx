@@ -1,4 +1,5 @@
 import {
+  Bot,
   Box,
   Boxes,
   Brain,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
+  bot: Bot,
   box: Box,
   boxes: Boxes,
   brain: Brain,

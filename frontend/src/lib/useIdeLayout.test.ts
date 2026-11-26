@@ -95,6 +95,10 @@ describe("useIdeLayout", () => {
     expect(result.current.layout.sidebarPosition).toBe("right");
     act(() => result.current.setSidebarPosition("left"));
     expect(result.current.layout.sidebarPosition).toBe("left");
+    act(() => result.current.setSidebarPosition("bottom"));
+    expect(result.current.layout.sidebarPosition).toBe("bottom");
+    act(() => result.current.setSidebarHeight(320));
+    expect(result.current.layout.sidebarHeight).toBe(320);
     act(() => result.current.setSidebarPosition("right"));
     await waitFor(() => {
       const stored = JSON.parse(localStorage.getItem(layoutStorageKey("u1", "w1")) ?? "{}");

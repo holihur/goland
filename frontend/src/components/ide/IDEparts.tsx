@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bug, FileCode2, Files, GitBranch, Keyboard, ListTree, Puzzle, RotateCw, Search, Settings2, TerminalSquare } from "lucide-react";
+import { Bug, FileCode2, Files, GitBranch, GripVertical, Keyboard, ListTree, Puzzle, RotateCw, Search, Settings2, TerminalSquare } from "lucide-react";
 import type { Workspace } from "@/lib/types";
 import type { SourceLocation } from "@/lib/lsp";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,8 @@ export function ActivityBar({
   onPalette,
   pluginPanels = [],
   position = "left",
+  onDockDragStart,
+  onDockDragEnd,
 }: {
   view: SideView;
   sidebarOpen: boolean;
@@ -30,6 +32,8 @@ export function ActivityBar({
   onPalette: () => void;
   pluginPanels?: PluginPanelEntry[];
   position?: "left" | "right";
+  onDockDragStart?: () => void;
+  onDockDragEnd?: () => void;
 }) {
   const items: Array<{ id: SideView; icon: ReactNode; label: string }> = [
     { id: "explorer", icon: <Files className="h-[18px] w-[18px]" />, label: "Explorer (⌘B)" },
@@ -50,6 +54,20 @@ export function ActivityBar({
         position === "right" ? "order-3 border-l" : "border-r",
       )}
     >
+      <div
+        draggable
+        title="Drag panel to left, bottom or right"
+        aria-label="Drag panel"
+        className="mb-1 grid h-6 w-8 cursor-grab place-items-center rounded text-muted-foreground/50 hover:bg-accent hover:text-foreground active:cursor-grabbing"
+        onDragStart={(event) => {
+          event.dataTransfer.setData("text/plain", "goland-dock");
+          event.dataTransfer.effectAllowed = "move";
+          onDockDragStart?.();
+        }}
+        onDragEnd={() => onDockDragEnd?.()}
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </div>
       {items.map((item) => (
         <Tooltip key={item.id}>
           <TooltipTrigger asChild>

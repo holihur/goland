@@ -10,6 +10,7 @@ import {
   KeyRound,
   ListTree,
   Maximize2,
+  PanelBottom,
   PanelLeft,
   PanelRight,
   Puzzle,
@@ -37,6 +38,7 @@ export function buildPaletteActions({
   closeTab,
   toggleSidebar,
   toggleSidebarPosition,
+  setSidebarPosition,
   toggleBottom,
   openBottom,
   showSideView,
@@ -66,6 +68,7 @@ export function buildPaletteActions({
   closeTab: (path: string) => void;
   toggleSidebar: () => void;
   toggleSidebarPosition: () => void;
+  setSidebarPosition: (position: "left" | "bottom" | "right") => void;
   toggleBottom: () => void;
   openBottom: (view: "tests") => void;
   showSideView: (view: "outline" | "explorer" | "git" | "debug" | "search") => void;
@@ -154,6 +157,15 @@ export function buildPaletteActions({
       source: SOURCE,
       icon: layout.sidebarPosition === "right" ? <PanelLeft className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />,
       run: toggleSidebarPosition,
+    },
+    {
+      id: "toggle-sidebar-bottom",
+      label: layout.sidebarPosition === "bottom" ? "Move sidebar to left" : "Move sidebar to bottom",
+      description: "Dock the activity panel below the editor, or restore it to the left.",
+      category: "Layout",
+      source: SOURCE,
+      icon: <PanelBottom className="h-3.5 w-3.5" />,
+      run: () => setSidebarPosition(layout.sidebarPosition === "bottom" ? "left" : "bottom"),
     },
     {
       id: "show-tests",

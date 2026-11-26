@@ -4,8 +4,7 @@ import { api, ApiError } from "@/lib/api";
 import type { Diagnostic, User, Workspace } from "@/lib/types";
 import { LSPClient, languageForPath, type SourceLocation } from "@/lib/lsp";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { FileExplorer } from "@/components/editor/FileExplorer";
-import { ActivityBar, ReferencesDialog, WelcomePane, WorkspaceSettings, type SideView } from "./IDEparts";
+import { ActivityBar, ReferencesDialog, WelcomePane, type SideView } from "./IDEparts";
 import { BottomPanel } from "./BottomPanel";
 import { EditorGroups, type EditorTab as Tab } from "./EditorGroups";
 import { IdeHeader } from "./IdeHeader";
@@ -22,11 +21,12 @@ import { useBreakpoints } from "@/lib/useBreakpoints";
 import { usePluginContributions } from "@/lib/usePluginContributions";
 import { pluginLspSocket } from "@/lib/plugin-api";
 import { cn } from "@/lib/utils";
-import { PluginSidebarPanel } from "@/components/plugins/PluginSidebarPanel";
 import { IdeFooter } from "./IdeFooter";
 import { buildPaletteActions } from "./paletteActions";
 import { EditorPane } from "./EditorPane";
-import { ByokDialog, CommandPalette, DebugPanel, GitPanel, ManagerDialog, OutlinePanel, SearchPanel, SettingsDialog, TokenDialog } from "./lazyViews";
+import { SidebarContent } from "./SidebarContent";
+import { BottomSidebarDock, DockOverlay } from "./SidebarDock";
+import { ByokDialog, CommandPalette, ManagerDialog, SettingsDialog, TokenDialog } from "./lazyViews";
 import { useCommandSystem } from "@/lib/useCommandSystem";
 import {
   DEFAULT_BOTTOM_HEIGHT,
@@ -53,12 +53,16 @@ export function IDE({
     layout,
     compact,
     sidebarRight,
+    sidebarBottom,
     sidebarMax,
+    maxSidebarHeight,
     maxBottomHeight,
     restoredPaths,
     activePath,
     setSidebarWidth,
     setSidebarOpen,
+    setSidebarHeight,
+    setSidebarPosition,
     toggleSidebar,
     toggleSidebarPosition,
     setSideView: showSideView,
@@ -89,6 +93,8 @@ export function IDE({
   const [tokensOpen, setTokensOpen] = useState(false);
   const [byokOpen, setByokOpen] = useState(false);
   const [managersOpen, setManagersOpen] = useState(false);
+  const [dockDrag, setDockDrag] = useState(false);
+  const [dockPreview, setDockPreview] = useState<"left" | "bottom" | "right" | null>(null);
   const [saving, setSaving] = useState("");
   const [diagnostics, setDiagnostics] = useState<Record<string, Diagnostic[]>>({});
   const [cursorLine, setCursorLine] = useState(1);
@@ -427,6 +433,7 @@ export function IDE({
     closeTab,
     toggleSidebar,
     toggleSidebarPosition,
+    setSidebarPosition,
     toggleBottom,
     openBottom,
     showSideView,
@@ -477,6 +484,27 @@ export function IDE({
 
   const lineCount = activeTab && !activeTab.binary ? activeTab.content.split("\n").length : 0;
   const problems = Object.values(diagnostics).reduce((count, items) => count + items.length, 0);
+  const sidebarContent = (
+    <SidebarContent
+      view={view}
+      workspace={workspace}
+      activePath={activePath}
+      activeTab={activeTab}
+      treeKey={treeKey}
+      gitKey={gitKey}
+      lspClients={lspClients}
+      lspTargetForPath={lspTargetForPath}
+      breakpoints={breakpoints}
+      setBreakpoints={setBreakpoints}
+      plugins={plugins}
+      openFile={openFile}
+      openLocation={openLocation}
+      reloadReplacedFiles={reloadReplacedFiles}
+      refreshTree={refreshTree}
+      refreshGit={refreshGit}
+      showSideView={showSideView}
+    />
+  );
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -501,17 +529,44 @@ export function IDE({
           onOpenManagers={() => setManagersOpen(true)}
         />
 
-        <div className="relative flex min-h-0 flex-1">
+        <div
+          className="relative flex min-h-0 flex-1"
+          onDragOver={(event) => {
+            if (!dockDrag) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            const rect = event.currentTarget.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            setDockPreview(y > rect.height * 0.62 ? "bottom" : x < rect.width / 2 ? "left" : "right");
+          }}
+          onDrop={(event) => {
+            if (!dockDrag) return;
+            event.preventDefault();
+            const position = dockPreview ?? "left";
+            setSidebarPosition(position);
+            setSidebarOpen(true);
+            setDockDrag(false);
+            setDockPreview(null);
+          }}
+        >
           <ActivityBar
             view={view}
             sidebarOpen={sidebarOpen}
             onSelect={selectSideView}
             onPalette={() => setPaletteOpen(true)}
             pluginPanels={plugins.pluginPanels}
-            position={layout.sidebarPosition}
+            position={layout.sidebarPosition === "right" && !sidebarBottom ? "right" : "left"}
+            onDockDragStart={() => setDockDrag(true)}
+            onDockDragEnd={() => {
+              setDockDrag(false);
+              setDockPreview(null);
+            }}
           />
 
-          {sidebarOpen && (
+          {dockDrag && <DockOverlay preview={dockPreview} />}
+
+          {sidebarOpen && !sidebarBottom && (
             <>
             {compact && (
               <button
@@ -547,79 +602,7 @@ export function IDE({
               )}
               style={compact ? undefined : { width: layout.sidebarWidth }}
             >
-              {view === "explorer" && (
-                <FileExplorer
-                  workspaceId={workspace.id}
-                  refreshKey={treeKey}
-                  onOpenFile={openFile}
-                  onChanged={refreshTree}
-                />
-              )}
-              {view === "search" && (
-                <Suspense fallback={<div className="p-3 text-xs text-muted-foreground">Loading search…</div>}>
-                  <SearchPanel
-                    workspaceId={workspace.id}
-                    onOpenFile={(path, line, column) => {
-                      if (line) void openLocation({ path, line, column: column ?? 1, endLine: line, endColumn: column ?? 1 });
-                      else void openFile(path);
-                    }}
-                    onReplaced={(paths) => void reloadReplacedFiles(paths)}
-                  />
-                </Suspense>
-              )}
-              {view === "outline" && (
-                <Suspense fallback={<div className="p-3 text-xs text-muted-foreground">Loading outline…</div>}>
-                  <OutlinePanel
-                    path={activePath}
-                    lsp={activeTab ? lspClients[lspTargetForPath(activeTab.path)?.key ?? ""] ?? null : null}
-                    onOpenLocation={(location) => void openLocation(location)}
-                  />
-                </Suspense>
-              )}
-              {view === "git" && (
-                <Suspense fallback={<div className="p-3 text-xs text-muted-foreground">Loading source control…</div>}>
-                  <GitPanel
-                    workspaceId={workspace.id}
-                    refreshKey={gitKey}
-                    onOpenFile={openFile}
-                    onWorkspaceChanged={refreshGit}
-                  />
-                </Suspense>
-              )}
-              {view === "debug" && (
-                <Suspense fallback={<div className="p-3 text-xs text-muted-foreground">Loading debugger…</div>}>
-                  <DebugPanel
-                    workspace={workspace}
-                    activePath={activeTab?.path ?? ""}
-                    breakpoints={breakpoints}
-                    onBreakpointsChange={setBreakpoints}
-                    onOpenLocation={(location) => void openLocation(location)}
-                    pluginDebuggers={plugins.enabled.flatMap((plugin) =>
-                      (plugin.manifest?.contributes.debuggers ?? []).map((dbg) => ({
-                        pluginId: plugin.id,
-                        pluginName: plugin.name,
-                        kind: dbg.kind,
-                        label: dbg.label,
-                      })),
-                    )}
-                  />
-                </Suspense>
-              )}
-              {view === "settings" && <WorkspaceSettings workspace={workspace} />}
-              <PluginSidebarPanel
-                view={view}
-                workspace={workspace}
-                plugins={plugins.enabled}
-                panels={plugins.panels}
-                outputs={plugins.outputs}
-                status={plugins.status}
-                execute={plugins.execute}
-                cancel={plugins.cancel}
-                onConfigure={() => showSideView("settings")}
-                onOpenFile={(path, line) =>
-                  void openLocation({ path, line, column: 1, endLine: line, endColumn: 1 })
-                }
-              />
+              {sidebarContent}
             </aside>
             {!compact && !sidebarRight && (
               <ResizeDivider
@@ -635,7 +618,8 @@ export function IDE({
             </>
           )}
 
-          <main className={cn("relative flex min-w-0 flex-1 flex-col", sidebarRight && "order-1")}>
+          <div className={cn("relative flex min-w-0 flex-1 flex-col", sidebarRight && "order-1")}>
+          <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1 flex-col">
               {tabs.length === 0 ? (
                 <WelcomePane
@@ -724,6 +708,19 @@ export function IDE({
               </>
             )}
           </main>
+
+          {sidebarOpen && sidebarBottom && (
+            <BottomSidebarDock
+              compact={compact}
+              height={layout.sidebarHeight}
+              maxHeight={maxSidebarHeight}
+              onResize={setSidebarHeight}
+              onReset={() => setSidebarHeight(260)}
+            >
+              {sidebarContent}
+            </BottomSidebarDock>
+          )}
+          </div>
         </div>
 
         <IdeFooter

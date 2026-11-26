@@ -9,6 +9,7 @@ export const LAYOUT_VERSION = 1;
 export const SIDEBAR_MIN = 180;
 export const SIDEBAR_MAX = 600;
 export const DEFAULT_SIDEBAR_WIDTH = 270;
+export const DEFAULT_SIDEBAR_HEIGHT = 260;
 
 export const BOTTOM_MIN = 120;
 export const BOTTOM_MAX_RATIO = 0.7;
@@ -20,7 +21,7 @@ export const NARROW_BREAKPOINT = 900;
 export type SideView = "explorer" | "search" | "outline" | "git" | "debug" | "settings" | `plugin:${string}`;
 export type BottomView = "terminal" | "output" | "tests";
 export type SplitDirection = "right" | "down";
-export type SidebarPosition = "left" | "right";
+export type SidebarPosition = "left" | "bottom" | "right";
 
 export interface EditorGroupState {
   /** Tab paths in display order. */
@@ -32,6 +33,7 @@ export interface EditorGroupState {
 export interface LayoutState {
   version: number;
   sidebarWidth: number;
+  sidebarHeight: number;
   sidebarOpen: boolean;
   sidebarPosition: SidebarPosition;
   sideView: SideView;
@@ -63,6 +65,10 @@ export function clampSidebarWidth(value: number): number {
   return Math.round(clamp(value, SIDEBAR_MIN, SIDEBAR_MAX));
 }
 
+export function clampSidebarHeight(value: number): number {
+  return Math.round(clamp(value, 120, 600));
+}
+
 export function clampBottomHeight(value: number, viewportHeight: number): number {
   const viewport = Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 800;
   const max = Math.max(BOTTOM_MIN, Math.round(viewport * BOTTOM_MAX_RATIO));
@@ -77,6 +83,7 @@ export function defaultLayout(groupId = "group-1"): LayoutState {
   return {
     version: LAYOUT_VERSION,
     sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+    sidebarHeight: DEFAULT_SIDEBAR_HEIGHT,
     sidebarOpen: true,
     sidebarPosition: "left",
     sideView: "explorer",
@@ -268,10 +275,14 @@ export function closeGroup(layout: LayoutState, groupId: string): LayoutState {
 
 export function updateSidebar(
   layout: LayoutState,
-  patch: Partial<Pick<LayoutState, "sidebarWidth" | "sidebarOpen" | "sidebarPosition" | "sideView">>,
+  patch: Partial<Pick<LayoutState, "sidebarWidth" | "sidebarHeight" | "sidebarOpen" | "sidebarPosition" | "sideView">>,
 ): LayoutState {
   const next = { ...layout, ...patch };
-  return { ...next, sidebarWidth: clampSidebarWidth(next.sidebarWidth) };
+  return {
+    ...next,
+    sidebarWidth: clampSidebarWidth(next.sidebarWidth),
+    sidebarHeight: clampSidebarHeight(next.sidebarHeight),
+  };
 }
 
 export function updateBottom(
@@ -301,12 +312,16 @@ export function sanitizeLayout(raw: unknown, viewportHeight: number): LayoutStat
   if (!isRecord(raw)) return fallback;
 
   const sidebarWidth = clampSidebarWidth(typeof raw.sidebarWidth === "number" ? raw.sidebarWidth : fallback.sidebarWidth);
+  const sidebarHeight = clampSidebarHeight(
+    typeof raw.sidebarHeight === "number" ? raw.sidebarHeight : fallback.sidebarHeight,
+  );
   const bottomHeight = clampBottomHeight(
     typeof raw.bottomHeight === "number" ? raw.bottomHeight : fallback.bottomHeight,
     viewportHeight,
   );
   const sideView = isSideView(raw.sideView) ? raw.sideView : fallback.sideView;
-  const sidebarPosition: SidebarPosition = raw.sidebarPosition === "right" ? "right" : "left";
+  const sidebarPosition: SidebarPosition =
+    raw.sidebarPosition === "right" ? "right" : raw.sidebarPosition === "bottom" ? "bottom" : "left";
   const bottomView: BottomView =
     raw.bottomView === "output" ? "output" : raw.bottomView === "tests" ? "tests" : "terminal";
 
@@ -347,6 +362,7 @@ export function sanitizeLayout(raw: unknown, viewportHeight: number): LayoutStat
   return {
     version: LAYOUT_VERSION,
     sidebarWidth,
+    sidebarHeight,
     sidebarOpen: asBoolean(raw.sidebarOpen, fallback.sidebarOpen),
     sidebarPosition,
     sideView,
