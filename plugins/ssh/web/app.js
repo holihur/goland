@@ -1,96 +1,94 @@
-const STYLE = `
-  :host { display:flex; flex-direction:column; height:100%; min-height:0; font:11px/1.5 "JetBrains Mono","SFMono-Regular",Consolas,monospace; color:CanvasText; background:Canvas; }
-  .bar { display:flex; flex-wrap:wrap; gap:4px; padding:8px; border-bottom:1px solid color-mix(in srgb, CanvasText 16%, transparent); }
-  button { height:26px; padding:0 8px; border:1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius:4px; background:color-mix(in srgb, CanvasText 6%, transparent); color:inherit; cursor:pointer; }
-  button:hover { background:color-mix(in srgb, CanvasText 12%, transparent); }
-  button:disabled { opacity:.5; cursor:wait; }
-  .fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; padding:8px; border-bottom:1px solid color-mix(in srgb, CanvasText 16%, transparent); }
-  label { display:flex; flex-direction:column; gap:2px; color:color-mix(in srgb, CanvasText 60%, transparent); }
-  input { height:24px; padding:0 6px; border:1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius:4px; background:transparent; color:inherit; font:inherit; }
-  .wide { grid-column:1 / -1; }
-  pre { flex:1; min-height:0; margin:0; padding:10px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
-  .status { padding:6px 10px; color:color-mix(in srgb, CanvasText 60%, transparent); border-bottom:1px solid color-mix(in srgb, CanvasText 16%, transparent); }
+import { PluginConsole, icon } from "/plugin-ui.js";
+
+const STYLES = `
+  .ssh-grid { display: grid; grid-template-columns: 1.35fr .8fr; gap: 9px; }
+  .ssh-grid .span-full { grid-column: 1 / -1; }
+  .ssh-presets { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+  .ssh-tip { display: flex; gap: 7px; align-items: flex-start; color: var(--pc-muted); font-size: 9px; line-height: 1.5; }
+  .ssh-tip .pc-icon { color: var(--pc-primary); margin-top: 1px; }
+  .ssh-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+  .ssh-actions .pc-btn.primary { margin-left: auto; }
+  @media (max-width: 360px) { .ssh-grid { grid-template-columns: 1fr; } .ssh-grid .span-full { grid-column: auto; } }
 `;
-const FIELDS = [
-  ["host", "host", "example.com or config alias"],
-  ["user", "user", "deploy"],
-  ["port", "port", "22"],
-  ["identity", "identity file", "~/.ssh/id_ed25519"],
-];
+
+const PRESETS = ["uptime", "df -h", "whoami", "docker ps"];
 
 export const tagName = "goland-ssh-console";
 
-export default class SSHConsole extends HTMLElement {
-  constructor() { super(); this.attachShadow({ mode: "open" }); this._built = false; this._busy = false; }
-  set api(value) { this._api = value; this.style.colorScheme = value?.theme === "dark" ? "dark" : "light"; this.build(); }
-  get api() { return this._api; }
-  connectedCallback() { this.build(); }
-  build() {
-    if (this._built) return;
-    this._built = true;
-    const style = document.createElement("style"); style.textContent = STYLE;
-    const bar = document.createElement("div"); bar.className = "bar";
-    const fields = document.createElement("div"); fields.className = "fields";
-    this._inputs = {};
-    for (const [key, label, placeholder] of FIELDS) {
-      const wrap = document.createElement("label"); wrap.textContent = label;
-      const input = document.createElement("input"); input.placeholder = placeholder; input.value = key === "port" ? "22" : "";
-      this._inputs[key] = input; wrap.append(input); fields.append(wrap);
-    }
-    const commandWrap = document.createElement("label"); commandWrap.className = "wide"; commandWrap.textContent = "command";
-    const command = document.createElement("input"); command.placeholder = "uptime; df -h";
-    this._inputs.command = command; commandWrap.append(command); fields.append(commandWrap);
-    const status = document.createElement("div"); status.className = "status"; status.textContent = "SSH";
-    const output = document.createElement("pre"); output.textContent = "Test a connection or run a command.";
-    this._status = status; this._output = output;
-    for (const [label, action] of [["Test connection", "test"], ["Run command", "exec"], ["Config hosts", "hosts"]]) {
-      const button = document.createElement("button"); button.textContent = label; button.dataset.action = action; button.addEventListener("click", () => this.run(action)); bar.append(button);
-    }
-    const cancel = document.createElement("button"); cancel.textContent = "Cancel"; cancel.hidden = true; cancel.addEventListener("click", () => this.cancel()); bar.append(cancel);
-    this._cancelButton = cancel;
-    this.shadowRoot.replaceChildren(style, bar, fields, status, output);
+export default class SSHConsole extends PluginConsole {
+  static styles = STYLES;
+  static storageKey = "ssh-console";
+
+  get consoleTitle() { return "SSH output"; }
+  get emptyText() { return "Test a connection or run a non-interactive command to see output here."; }
+  get emptyIcon() { return "network"; }
+
+  render() {
+    return `
+      <div class="pc-stack">
+        <div class="pc-card">
+          <div class="pc-card-head">${icon("network", 13)} <span>Connection</span></div>
+          <div class="ssh-grid">
+            <label class="pc-field"><span>Host</span><input class="pc-input" data-ssh="host" placeholder="example.com or config alias" spellcheck="false" /></label>
+            <label class="pc-field"><span>User</span><input class="pc-input" data-ssh="user" placeholder="deploy" spellcheck="false" /></label>
+            <label class="pc-field"><span>Port</span><input class="pc-input" data-ssh="port" placeholder="22" inputmode="numeric" spellcheck="false" /></label>
+            <label class="pc-field"><span>Identity file</span><input class="pc-input" data-ssh="identity" placeholder="~/.ssh/id_ed25519" spellcheck="false" /></label>
+          </div>
+        </div>
+        <div class="pc-card">
+          <div class="pc-card-head">${icon("terminal", 13)} <span>Command</span></div>
+          <label class="pc-field span-full"><span>Run a non-interactive command on the host</span><input class="pc-input" data-ssh="command" placeholder="uptime; df -h" spellcheck="false" /></label>
+          <div class="ssh-presets">
+            ${PRESETS.map((preset) => `<button class="pc-chip" data-ssh-preset="${preset}">${preset}</button>`).join("")}
+          </div>
+          <div class="ssh-actions">
+            <button class="pc-btn ghost" data-plugin-action data-ssh-action="hosts">${icon("files", 12)} Config hosts</button>
+            <button class="pc-btn ghost" data-plugin-action data-ssh-action="test">${icon("check", 12)} Test connection</button>
+            <button class="pc-btn primary" data-plugin-action data-ssh-action="exec">${icon("send", 12)} Run command</button>
+          </div>
+        </div>
+        <div class="ssh-tip">${icon("network", 13)}<span>Non-interactive SSH only. Authentication uses your SSH agent, identity file or SSH config; password prompts are not supported.</span></div>
+      </div>`;
   }
-  async run(action) {
-    if (!this._api || this._busy) return;
-    this._busy = true;
-    this._requestId = "";
-    this._streamed = "";
-    this._output.textContent = "";
-    this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => (button.disabled = true));
-    this._cancelButton.hidden = false;
-    this._status.textContent = `Running ${action}…`;
-    this._api.setStatus?.(this._status.textContent, "running");
-    try {
-      const inputs = { action };
-      for (const [key, input] of Object.entries(this._inputs)) inputs[key] = input.value;
-      const result = await this._api.execute("ssh.run", inputs, {
-        onRequest: (requestId) => { this._requestId = requestId; },
-        onChunk: (chunk) => {
-          this._streamed += chunk;
-          this._output.textContent = this._streamed;
-          this._output.scrollTop = this._output.scrollHeight;
-        },
+
+  bind() {
+    this.$host = this.shadowRoot.querySelector('[data-ssh="host"]');
+    this.$user = this.shadowRoot.querySelector('[data-ssh="user"]');
+    this.$port = this.shadowRoot.querySelector('[data-ssh="port"]');
+    this.$identity = this.shadowRoot.querySelector('[data-ssh="identity"]');
+    this.$command = this.shadowRoot.querySelector('[data-ssh="command"]');
+    this.remember(this.$host, "host");
+    this.remember(this.$user, "user");
+    this.remember(this.$port, "port", "22");
+    this.remember(this.$identity, "identity");
+    this.remember(this.$command, "command");
+    for (const button of this.shadowRoot.querySelectorAll("[data-ssh-action]")) {
+      button.addEventListener("click", () => this.runAction(button.dataset.sshAction));
+    }
+    for (const button of this.shadowRoot.querySelectorAll("[data-ssh-preset]")) {
+      button.addEventListener("click", () => {
+        this.$command.value = button.dataset.sshPreset;
+        this.persist("command", this.$command.value);
+        this.$command.focus();
       });
-      if (!this._streamed) this._output.textContent = result.output || "(no output)";
-      this._status.textContent = `${action} finished`;
-      this._api.setStatus?.(this._status.textContent, "success");
-    } catch (err) {
-      this._output.textContent = err instanceof Error ? err.message : String(err);
-      this._status.textContent = "SSH command failed";
-      this._api.setStatus?.("SSH command failed", "error");
-      this._api.notify("error", "SSH command failed");
-    } finally {
-      this._busy = false;
-      this._cancelButton.hidden = true;
-      this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => (button.disabled = false));
     }
   }
 
-  async cancel() {
-    if (!this._requestId || !this._api) return;
-    this._status.textContent = "Cancelling…";
-    this._api.setStatus?.("Cancelling…", "running");
-    try { await this._api.cancel(this._requestId); } catch {}
-  }
+  primaryAction() { void this.runAction(this.$command?.value.trim() ? "exec" : "test"); }
 
+  async runAction(action) {
+    const label = action === "hosts" ? "SSH config hosts" : action === "test" ? "Connection test" : "Command";
+    await this.run("ssh.run", {
+      action,
+      host: this.$host.value,
+      user: this.$user.value,
+      port: this.$port.value,
+      identity: this.$identity.value,
+      command: this.$command.value,
+    }, {
+      label: `${label}…`,
+      successLabel: action === "test" ? "Connection OK" : `${label} finished`,
+      errorLabel: `${label} failed`,
+    });
+  }
 }

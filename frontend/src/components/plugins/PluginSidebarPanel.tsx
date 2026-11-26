@@ -11,6 +11,7 @@ export function PluginSidebarPanel({
   plugins,
   panels,
   outputs,
+  status,
   execute,
   cancel,
   onOpenFile,
@@ -21,6 +22,7 @@ export function PluginSidebarPanel({
   plugins: WorkspacePlugin[];
   panels: Record<string, PluginPanelState>;
   outputs: Record<string, string>;
+  status?: Record<string, { text: string; tooltip?: string }>;
   execute: (
     pluginId: string,
     commandId: string,
@@ -51,6 +53,7 @@ export function PluginSidebarPanel({
         outputs={outputs}
         onOpenFile={onOpenFile}
         onConfigure={onConfigure}
+        runtimeStatus={status?.[`${plugin.id}:${plugin.manifest?.contributes.status?.[0]?.id ?? ""}`]}
       />
     );
   }

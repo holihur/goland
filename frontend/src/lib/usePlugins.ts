@@ -168,9 +168,10 @@ export function usePlugins(workspaceId: string) {
           queueChunk(message.requestId, message.chunk ?? "");
         } else if (message.type === "notify" || message.type === "log") {
           if (!message.message) return;
-          if (message.level === "error") toast.error(message.message);
-          else if (message.level === "warning" || message.level === "warn") toast.warning(message.message);
-          else toast.info(message.message);
+          const text = message.message.length > 240 ? `${message.message.slice(0, 240)}…` : message.message;
+          if (message.level === "error") toast.error(text);
+          else if (message.level === "warning" || message.level === "warn") toast.warning(text);
+          else toast.info(text);
         } else if (message.type === "crashed") {
           setPluginErrors((current) => ({ ...current, [pluginId]: message.error ?? "Plugin crashed" }));
           toast.error(`${pluginId || "Plugin"} crashed: ${message.error ?? "unknown error"}`);

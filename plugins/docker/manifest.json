@@ -2,7 +2,7 @@
   "apiVersion": 1,
   "id": "docker",
   "name": "Docker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Inspect containers and images, run Compose services, view logs and build images through the Docker CLI.",
   "executable": "bin/docker",
   "contributes": {

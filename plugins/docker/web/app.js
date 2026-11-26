@@ -1,145 +1,136 @@
-const STYLE = `
-  :host {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    height: 100%;
-    font: 11px/1.5 "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-    color: CanvasText;
-    background: Canvas;
-  }
-  .bar { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; border-bottom: 1px solid color-mix(in srgb, CanvasText 16%, transparent); }
-  button {
-    height: 26px; padding: 0 8px; border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
-    border-radius: 4px; background: color-mix(in srgb, CanvasText 6%, transparent); color: inherit; cursor: pointer;
-  }
-  button:hover { background: color-mix(in srgb, CanvasText 12%, transparent); }
-  button:disabled { opacity: .5; cursor: wait; }
-  .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px; border-bottom: 1px solid color-mix(in srgb, CanvasText 16%, transparent); }
-  label { display: flex; flex-direction: column; gap: 2px; color: color-mix(in srgb, CanvasText 60%, transparent); }
-  input { height: 24px; padding: 0 6px; border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius: 4px; background: transparent; color: inherit; font: inherit; }
-  pre { flex: 1; min-height: 0; margin: 0; padding: 10px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
-  .status { padding: 6px 10px; color: color-mix(in srgb, CanvasText 60%, transparent); border-bottom: 1px solid color-mix(in srgb, CanvasText 16%, transparent); }
+import { PluginConsole, icon } from "/plugin-ui.js";
+
+const STYLES = `
+  .docker-head { display: flex; align-items: center; gap: 8px; }
+  .docker-head .pc-badge { margin-left: auto; font-family: "JetBrains Mono", monospace; letter-spacing: .04em; }
+  .docker-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .docker-actions .pc-action { min-height: 40px; }
+  .docker-actions .pc-action span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .docker-actions .pc-action small { color: var(--pc-muted); font-size: 8px; font-weight: 400; }
+  .docker-form-card[hidden] { display: none; }
+  .docker-form-card .pc-grid { margin-top: 1px; }
+  .docker-form-card .pc-actions { margin-top: 11px; }
+  .docker-tip { display: flex; gap: 7px; align-items: flex-start; color: var(--pc-muted); font-size: 9px; line-height: 1.5; }
+  .docker-tip .pc-icon { color: var(--pc-primary); margin-top: 1px; }
 `;
-const FIELDS = [
-  ["service", "service", ""],
-  ["file", "compose file", "docker-compose.yml"],
-  ["container", "container", ""],
-  ["image", "image tag", "app:latest"],
+
+const ACTIONS = [
+  { id: "ps", label: "Containers", hint: "Running and stopped", icon: "container", simple: true },
+  { id: "images", label: "Images", hint: "Local image cache", icon: "layers", simple: true },
+  { id: "compose-up", label: "Compose up", hint: "Start services", icon: "play", form: true },
+  { id: "compose-down", label: "Compose down", hint: "Stop services", icon: "stop", form: true },
+  { id: "compose-logs", label: "Compose logs", hint: "Recent service logs", icon: "files", form: true },
+  { id: "logs", label: "Container logs", hint: "Tail one container", icon: "terminal", form: true },
+  { id: "build", label: "Build image", hint: "Build from context", icon: "layers", form: true },
+  { id: "version", label: "Version", hint: "CLI information", icon: "server", simple: true },
 ];
+
+const FORMS = {
+  "compose-up": [["service", "Service (optional)", "api"], ["file", "Compose file", "docker-compose.yml"]],
+  "compose-down": [["service", "Service (optional)", "api"], ["file", "Compose file", "docker-compose.yml"]],
+  "compose-logs": [["service", "Service (optional)", "api"], ["file", "Compose file", "docker-compose.yml"]],
+  logs: [["container", "Container", "my-app"]],
+  build: [["image", "Image tag", "app:latest"], ["context", "Build context", "."], ["dockerfile", "Dockerfile", "Dockerfile"]],
+};
 
 export const tagName = "goland-docker-console";
 
-export default class DockerConsole extends HTMLElement {
-  constructor() {
-    super();
-    this.attachShadow({ mode: "open" });
-    this._built = false;
-    this._busy = false;
+export default class DockerConsole extends PluginConsole {
+  static styles = STYLES;
+  static storageKey = "docker-console";
+
+  get consoleTitle() { return "Docker output"; }
+  get emptyText() { return "Choose a quick action above, then inspect containers, images or Compose logs."; }
+  get emptyIcon() { return "container"; }
+
+  render() {
+    return `
+      <div class="pc-stack">
+        <div class="pc-card">
+          <div class="pc-card-head">
+            ${icon("container", 13)} <span>Docker</span>
+            <span class="pc-badge"><span class="pc-dot"></span> workspace CLI</span>
+          </div>
+          <div class="docker-actions">
+            ${ACTIONS.map((action) => `
+              <button class="pc-action" data-plugin-action data-docker-action="${action.id}" aria-pressed="false">
+                ${icon(action.icon, 14)}
+                <span><strong>${action.label}</strong><small>${action.hint}</small></span>
+              </button>`).join("")}
+          </div>
+        </div>
+        <div class="pc-card docker-form-card" data-docker-form-card hidden>
+          <div class="pc-card-head">${icon("settings", 13)} <span data-docker-form-title>Options</span></div>
+          <div class="pc-grid" data-docker-form></div>
+          <div class="pc-actions end">
+            <button class="pc-btn primary" data-plugin-action data-docker-run>${icon("play", 12)} Run</button>
+          </div>
+        </div>
+        <div class="docker-tip">${icon("server", 13)}<span>Commands run with the workspace environment and Docker settings. Long-running actions stream into the output panel and can be stopped at any time.</span></div>
+      </div>`;
   }
 
-  set api(value) {
-    this._api = value;
-    this.style.colorScheme = value?.theme === "dark" ? "dark" : "light";
-    this.build();
-  }
-
-  get api() {
-    return this._api;
-  }
-
-  connectedCallback() {
-    this.build();
-  }
-
-  build() {
-    if (this._built) return;
-    this._built = true;
-    const style = document.createElement("style");
-    style.textContent = STYLE;
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    const fields = document.createElement("div");
-    fields.className = "fields";
-    this._inputs = {};
-    for (const [key, label, value] of FIELDS) {
-      const wrap = document.createElement("label");
-      wrap.textContent = label;
-      const input = document.createElement("input");
-      input.value = value;
-      input.placeholder = label;
-      this._inputs[key] = input;
-      wrap.append(input);
-      fields.append(wrap);
+  bind() {
+    this.$active = "ps";
+    this.$formCard = this.shadowRoot.querySelector("[data-docker-form-card]");
+    this.$form = this.shadowRoot.querySelector("[data-docker-form]");
+    this.$formTitle = this.shadowRoot.querySelector("[data-docker-form-title]");
+    this.shadowRoot.querySelector("[data-docker-run]").addEventListener("click", () => this.runActive());
+    for (const button of this.shadowRoot.querySelectorAll("[data-docker-action]")) {
+      button.addEventListener("click", () => this.choose(button.dataset.dockerAction));
     }
-    const output = document.createElement("pre");
-    output.textContent = "Run a Docker action.";
-    this._output = output;
-    const status = document.createElement("div");
-    status.className = "status";
-    status.textContent = "Docker";
-    this._status = status;
-    for (const [label, action] of [
-      ["Containers", "ps"],
-      ["Images", "images"],
-      ["Compose up", "compose-up"],
-      ["Compose down", "compose-down"],
-      ["Compose logs", "compose-logs"],
-      ["Container logs", "logs"],
-      ["Build", "build"],
-      ["Version", "version"],
-    ]) {
-      const button = document.createElement("button");
-      button.textContent = label;
-      button.dataset.action = action; button.addEventListener("click", () => this.run(action));
-      bar.append(button);
-    }
-    const cancel = document.createElement("button"); cancel.textContent = "Cancel"; cancel.hidden = true; cancel.addEventListener("click", () => this.cancel()); bar.append(cancel);
-    this._cancelButton = cancel;
-    this.shadowRoot.replaceChildren(style, bar, fields, status, output);
+    this.choose("ps", false);
   }
 
-  async run(action) {
-    if (!this._api || this._busy) return;
-    this._busy = true;
-    this._requestId = "";
-    this._streamed = "";
-    this._output.textContent = "";
-    this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => (button.disabled = true));
-    this._cancelButton.hidden = false;
-    this._status.textContent = `Running ${action}…`;
-    this._api.setStatus?.(this._status.textContent, "running");
-    try {
-      const inputs = { action };
-      for (const [key, input] of Object.entries(this._inputs)) inputs[key] = input.value;
-      const result = await this._api.execute("docker.run", inputs, {
-        onRequest: (requestId) => { this._requestId = requestId; },
-        onChunk: (chunk) => {
-          this._streamed += chunk;
-          this._output.textContent = this._streamed;
-          this._output.scrollTop = this._output.scrollHeight;
-        },
-      });
-      if (!this._streamed) this._output.textContent = result.output || "(no output)";
-      this._status.textContent = `${action} finished`;
-      this._api.setStatus?.(this._status.textContent, "success");
-    } catch (err) {
-      this._output.textContent = err instanceof Error ? err.message : String(err);
-      this._status.textContent = "Docker command failed";
-      this._api.setStatus?.("Docker command failed", "error");
-      this._api.notify("error", "Docker command failed");
-    } finally {
-      this._busy = false;
-      this._cancelButton.hidden = true;
-      this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => (button.disabled = false));
+  choose(action, run = true) {
+    const definition = ACTIONS.find((item) => item.id === action);
+    if (!definition) return;
+    for (const button of this.shadowRoot.querySelectorAll("[data-docker-action]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.dockerAction === action));
+    }
+    this.$active = action;
+    if (definition.simple) {
+      this.$formCard.hidden = true;
+      if (run) void this.runAction(action, definition);
+      return;
+    }
+    this.$formCard.hidden = false;
+    this.$formTitle.textContent = definition.label;
+    this.renderForm(action);
+  }
+
+  renderForm(action) {
+    const fields = FORMS[action] ?? [];
+    this.$form.innerHTML = fields.map(([key, label, placeholder], index) => {
+      const value = this.restore(`field.${key}`, placeholder);
+      const wide = fields.length === 1 || index === 2 ? " span-2" : "";
+      return `<label class="pc-field${wide}"><span>${label}</span><input class="pc-input" data-docker-input="${key}" value="${this.attr(value)}" placeholder="${placeholder}" spellcheck="false" /></label>`;
+    }).join("") || '<div class="pc-help">No options required. Run to continue.</div>';
+    for (const input of this.$form.querySelectorAll("[data-docker-input]")) {
+      input.addEventListener("input", () => this.persist(`field.${input.dataset.dockerInput}`, input.value));
     }
   }
 
-  async cancel() {
-    if (!this._requestId || !this._api) return;
-    this._status.textContent = "Cancelling…";
-    this._api.setStatus?.("Cancelling…", "running");
-    try { await this._api.cancel(this._requestId); } catch {}
+  attr(value) { return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;"); }
+
+  primaryAction() { void this.runActive(); }
+
+  async runActive() {
+    const definition = ACTIONS.find((item) => item.id === this.$active) ?? ACTIONS[0];
+    if (definition.simple) return this.runAction(definition.id, definition);
+    return this.runAction(definition.id, definition);
   }
 
+  async runAction(action, definition = ACTIONS.find((item) => item.id === action)) {
+    const inputs = { action };
+    for (const input of this.shadowRoot.querySelectorAll("[data-docker-input]")) {
+      inputs[input.dataset.dockerInput] = input.value;
+    }
+    const label = definition?.label ?? action;
+    await this.run("docker.run", inputs, {
+      label: `${label}…`,
+      successLabel: `${label} finished`,
+      errorLabel: `${label} failed`,
+    });
+  }
 }

@@ -284,6 +284,18 @@ func stringInput(inputs map[string]any, key string) string {
 	return strings.TrimSpace(value)
 }
 
+func errorLine(value string) string {
+	for _, line := range strings.Split(value, "\n") {
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "failed") || strings.Contains(lower, "error") ||
+			strings.Contains(lower, "no such") || strings.Contains(lower, "permission denied") ||
+			strings.Contains(lower, "cannot") || strings.Contains(lower, "not found") {
+			return firstLine(line)
+		}
+	}
+	return firstLine(value)
+}
+
 func firstLine(value string) string {
 	value = strings.TrimSpace(value)
 	if index := strings.IndexByte(value, '\n'); index >= 0 {

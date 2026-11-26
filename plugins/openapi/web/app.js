@@ -1,108 +1,120 @@
-const STYLE = `
-  :host { display:flex; flex-direction:column; height:100%; min-height:0; font:11px/1.5 "JetBrains Mono","SFMono-Regular",Consolas,monospace; color:CanvasText; background:Canvas; }
-  .bar { display:flex; flex-wrap:wrap; gap:4px; padding:8px; border-bottom:1px solid color-mix(in srgb, CanvasText 16%, transparent); }
-  button { height:26px; padding:0 8px; border:1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius:4px; background:color-mix(in srgb, CanvasText 6%, transparent); color:inherit; cursor:pointer; }
-  button:hover { background:color-mix(in srgb, CanvasText 12%, transparent); }
-  button:disabled { opacity:.5; cursor:wait; }
-  .fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; padding:8px; border-bottom:1px solid color-mix(in srgb, CanvasText 16%, transparent); }
-  label { display:flex; flex-direction:column; gap:2px; color:color-mix(in srgb, CanvasText 60%, transparent); }
-  input, select, textarea { padding:4px 6px; border:1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius:4px; background:transparent; color:inherit; font:inherit; }
-  input, select { height:24px; }
-  textarea { min-height:56px; resize:vertical; }
-  .wide { grid-column:1 / -1; }
-  pre { flex:1; min-height:0; margin:0; padding:10px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
-  .status { padding:6px 10px; color:color-mix(in srgb, CanvasText 60%, transparent); border-bottom:1px solid color-mix(in srgb, CanvasText 16%, transparent); }
+import { PluginConsole, icon } from "/plugin-ui.js";
+
+const STYLES = `
+  .oa-tabs { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--pc-border); border-radius: 8px; background: color-mix(in srgb, var(--pc-panel) 55%, transparent); }
+  .oa-tab { flex: 1; height: 27px; border: 0; border-radius: 6px; background: transparent; color: var(--pc-muted); font: inherit; font-size: 10px; font-weight: 500; cursor: pointer; }
+  .oa-tab:hover { color: var(--pc-fg); }
+  .oa-tab[aria-selected="true"] { background: var(--pc-accent); color: var(--pc-fg); box-shadow: 0 1px 2px hsl(0 0% 0% / .12); }
+  .oa-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .oa-grid .span-2 { grid-column: 1 / -1; }
+  .oa-request-head { display: flex; align-items: center; gap: 7px; }
+  .oa-request-head .pc-badge { margin-left: auto; font-family: "JetBrains Mono", monospace; }
+  .oa-tip { display: flex; gap: 7px; align-items: flex-start; color: var(--pc-muted); font-size: 9px; line-height: 1.5; }
+  .oa-tip .pc-icon { color: var(--pc-primary); margin-top: 1px; }
+  .oa-actions { display: flex; align-items: center; gap: 7px; margin-top: 11px; }
+  .oa-actions .pc-btn.primary { margin-left: auto; }
+  @media (max-width: 360px) { .oa-grid { grid-template-columns: 1fr; } .oa-grid .span-2 { grid-column: auto; } }
 `;
-const FIELDS = [
-  ["spec", "spec file", "openapi.yaml"],
-  ["baseUrl", "base URL", "https://api.example.com"],
-  ["method", "method", "GET"],
-  ["path", "path", "/pets"],
+
+const TABS = [
+  { id: "overview", label: "Overview", command: "openapi.run", action: "overview", hint: "Summarize the spec" },
+  { id: "endpoints", label: "Endpoints", command: "openapi.run", action: "endpoints", hint: "List every operation" },
+  { id: "validate", label: "Validate", command: "openapi.run", action: "validate", hint: "Check the document" },
+  { id: "request", label: "Request", command: "openapi.run", action: "request", hint: "Send a live request" },
 ];
 
 export const tagName = "goland-openapi-console";
 
-export default class OpenAPIConsole extends HTMLElement {
-  constructor() { super(); this.attachShadow({ mode: "open" }); this._built = false; this._busy = false; }
-  set api(value) { this._api = value; this.style.colorScheme = value?.theme === "dark" ? "dark" : "light"; this.build(); }
-  get api() { return this._api; }
-  connectedCallback() { this.build(); }
-  build() {
-    if (this._built) return;
-    this._built = true;
-    const style = document.createElement("style"); style.textContent = STYLE;
-    const bar = document.createElement("div"); bar.className = "bar";
-    const fields = document.createElement("div"); fields.className = "fields";
-    this._inputs = {};
-    for (const [key, label, placeholder] of FIELDS) {
-      const wrap = document.createElement("label"); wrap.textContent = label;
-      let input;
-      if (key === "method") {
-        input = document.createElement("select");
-        for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]) {
-          const option = document.createElement("option"); option.value = method; option.textContent = method; input.append(option);
-        }
-      } else {
-        input = document.createElement("input"); input.placeholder = placeholder;
-      }
-      this._inputs[key] = input; wrap.append(input); fields.append(wrap);
-    }
-    for (const [key, label, placeholder] of [["headers", "headers (JSON)", '{"Authorization":"Bearer …"}'], ["body", "JSON body", '{"name":"Ada"}']]) {
-      const wrap = document.createElement("label"); wrap.className = "wide"; wrap.textContent = label;
-      const input = document.createElement("textarea"); input.placeholder = placeholder;
-      this._inputs[key] = input; wrap.append(input); fields.append(wrap);
-    }
-    const status = document.createElement("div"); status.className = "status"; status.textContent = "OpenAPI";
-    const output = document.createElement("pre"); output.textContent = "Inspect a spec or send a request.";
-    this._status = status; this._output = output;
-    for (const [label, action] of [["Overview", "overview"], ["Endpoints", "endpoints"], ["Validate", "validate"], ["Send request", "request"]]) {
-      const button = document.createElement("button"); button.textContent = label; button.dataset.action = action; button.addEventListener("click", () => this.run(action)); bar.append(button);
-    }
-    const cancel = document.createElement("button"); cancel.textContent = "Cancel"; cancel.hidden = true; cancel.addEventListener("click", () => this.cancel()); bar.append(cancel);
-    this._cancelButton = cancel;
-    this.shadowRoot.replaceChildren(style, bar, fields, status, output);
-  }
-  async run(action) {
-    if (!this._api || this._busy) return;
-    this._busy = true;
-    this._requestId = "";
-    this._streamed = "";
-    this._output.textContent = "";
-    this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => (button.disabled = true));
-    this._cancelButton.hidden = false;
-    this._status.textContent = `Running ${action}…`;
-    this._api.setStatus?.(this._status.textContent, "running");
-    try {
-      const inputs = { action };
-      for (const [key, input] of Object.entries(this._inputs)) inputs[key] = input.value;
-      const result = await this._api.execute("openapi.run", inputs, {
-        onRequest: (requestId) => { this._requestId = requestId; },
-        onChunk: (chunk) => {
-          this._streamed += chunk;
-          this._output.textContent = this._streamed;
-          this._output.scrollTop = this._output.scrollHeight;
-        },
-      });
-      if (!this._streamed) this._output.textContent = result.output || "(no output)";
-      this._status.textContent = `${action} finished`;
-      this._api.setStatus?.(this._status.textContent, "success");
-    } catch (err) {
-      this._output.textContent = err instanceof Error ? err.message : String(err);
-      this._status.textContent = "OpenAPI command failed";
-      this._api.setStatus?.("OpenAPI command failed", "error");
-      this._api.notify("error", "OpenAPI command failed");
-    } finally {
-      this._busy = false;
-      this._cancelButton.hidden = true;
-      this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => (button.disabled = false));
-    }
+export default class OpenAPIConsole extends PluginConsole {
+  static styles = STYLES;
+  static storageKey = "openapi-console";
+
+  get consoleTitle() { return "OpenAPI output"; }
+  get emptyText() { return "Load a spec, inspect endpoints, validate it or send a test request."; }
+  get emptyIcon() { return "braces"; }
+
+  render() {
+    return `
+      <div class="pc-stack">
+        <div class="oa-tabs" role="tablist">
+          ${TABS.map((tab) => `<button class="oa-tab" role="tab" data-oa-tab="${tab.id}" aria-selected="${tab.id === "overview"}">${tab.label}</button>`).join("")}
+        </div>
+        <div data-oa-content></div>
+        <div class="oa-tip">${icon("files", 13)}<span>Spec paths are resolved inside this workspace. Request headers and body are sent to the configured base URL.</span></div>
+      </div>`;
   }
 
-  async cancel() {
-    if (!this._requestId || !this._api) return;
-    this._status.textContent = "Cancelling…";
-    this._api.setStatus?.("Cancelling…", "running");
-    try { await this._api.cancel(this._requestId); } catch {}
+  bind() {
+    this.$content = this.shadowRoot.querySelector("[data-oa-content]");
+    this.$active = "overview";
+    for (const button of this.shadowRoot.querySelectorAll("[data-oa-tab]")) {
+      button.addEventListener("click", () => this.selectTab(button.dataset.oaTab));
+    }
+    this.renderTab();
   }
 
+  selectTab(tab) {
+    this.$active = tab;
+    for (const button of this.shadowRoot.querySelectorAll("[data-oa-tab]")) {
+      button.setAttribute("aria-selected", String(button.dataset.oaTab === tab));
+    }
+    this.renderTab();
+  }
+
+  renderTab() {
+    const tab = TABS.find((item) => item.id === this.$active) ?? TABS[0];
+    const spec = this.attr(this.restore("spec", "openapi.yaml"));
+    const baseUrl = this.attr(this.restore("baseUrl", ""));
+    const method = this.restore("method", "GET");
+    const path = this.attr(this.restore("path", "/pets"));
+    const headers = this.attr(this.restore("headers", ""));
+    const body = this.attr(this.restore("body", ""));
+    const specField = `<label class="pc-field span-2"><span>Spec file</span><input class="pc-input" data-oa="spec" value="${spec}" placeholder="openapi.yaml" spellcheck="false" /></label>`;
+    if (tab.id === "request") {
+      this.$content.innerHTML = `
+        <div class="pc-card">
+          <div class="pc-card-head oa-request-head">${icon("send", 13)} <span>Request builder</span><span class="pc-badge">${method}</span></div>
+          <div class="oa-grid">
+            ${specField}
+            <label class="pc-field"><span>Method</span><select class="pc-select" data-oa="method">${["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((item) => `<option ${item === method ? "selected" : ""}>${item}</option>`).join("")}</select></label>
+            <label class="pc-field"><span>Path</span><input class="pc-input" data-oa="path" value="${path}" placeholder="/pets" spellcheck="false" /></label>
+            <label class="pc-field span-2"><span>Base URL</span><input class="pc-input" data-oa="baseUrl" value="${baseUrl}" placeholder="https://api.example.com" spellcheck="false" /></label>
+            <label class="pc-field span-2"><span>Headers (JSON)</span><textarea class="pc-textarea" data-oa="headers" placeholder='{"Authorization":"Bearer …"}'>${headers}</textarea></label>
+            <label class="pc-field span-2"><span>JSON body</span><textarea class="pc-textarea" data-oa="body" placeholder='{"name":"Ada"}'>${body}</textarea></label>
+          </div>
+          <div class="oa-actions"><span class="pc-help">${tab.hint}</span><button class="pc-btn primary" data-plugin-action data-oa-run>${icon("send", 12)} Send request</button></div>
+        </div>`;
+    } else {
+      this.$content.innerHTML = `
+        <div class="pc-card">
+          <div class="pc-card-head">${icon("files", 13)} <span>${tab.label}</span></div>
+          <div class="oa-grid">${specField}</div>
+          <div class="oa-actions"><span class="pc-help">${tab.hint}</span><button class="pc-btn primary" data-plugin-action data-oa-run>${icon(tab.id === "validate" ? "check" : "play", 12)} Run</button></div>
+        </div>`;
+    }
+    for (const input of this.$content.querySelectorAll("[data-oa]")) {
+      input.addEventListener("input", () => this.persist(input.dataset.oa, input.value));
+      input.addEventListener("change", () => this.persist(input.dataset.oa, input.value));
+    }
+    this.$content.querySelector("[data-oa-run]").addEventListener("click", () => this.runActive());
+  }
+
+  attr(value) { return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;"); }
+
+  primaryAction() { void this.runActive(); }
+
+  async runActive() {
+    const tab = TABS.find((item) => item.id === this.$active) ?? TABS[0];
+    const inputs = { action: tab.action };
+    for (const input of this.$content.querySelectorAll("[data-oa]")) inputs[input.dataset.oa] = input.value;
+    await this.run("openapi.run", inputs, {
+      label: `${tab.hint}…`,
+      successLabel: `${tab.label} finished`,
+      errorLabel: `${tab.label} failed`,
+    });
+  }
+
+  normalizeOutput(value) {
+    try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; }
+  }
 }
