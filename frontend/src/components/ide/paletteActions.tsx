@@ -9,6 +9,8 @@ import {
   KeyRound,
   ListTree,
   Maximize2,
+  PanelLeft,
+  PanelRight,
   Puzzle,
   RotateCcw,
   Rows2,
@@ -33,6 +35,7 @@ export function buildPaletteActions({
   saveTab,
   closeTab,
   toggleSidebar,
+  toggleSidebarPosition,
   toggleBottom,
   openBottom,
   showSideView,
@@ -58,6 +61,7 @@ export function buildPaletteActions({
   saveTab: (path: string) => void;
   closeTab: (path: string) => void;
   toggleSidebar: () => void;
+  toggleSidebarPosition: () => void;
   toggleBottom: () => void;
   openBottom: (view: "tests") => void;
   showSideView: (view: "outline" | "explorer" | "git" | "debug" | "search") => void;
@@ -134,6 +138,15 @@ export function buildPaletteActions({
       defaultKey: "Mod+B",
       icon: <FolderOpen className="h-3.5 w-3.5" />,
       run: toggleSidebar,
+    },
+    {
+      id: "toggle-sidebar-position",
+      label: layout.sidebarPosition === "right" ? "Move sidebar to left" : "Move sidebar to right",
+      description: "Dock the activity bar and sidebar on the other side.",
+      category: "Layout",
+      source: SOURCE,
+      icon: layout.sidebarPosition === "right" ? <PanelLeft className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />,
+      run: toggleSidebarPosition,
     },
     {
       id: "show-tests",

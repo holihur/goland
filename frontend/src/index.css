@@ -138,8 +138,11 @@
   background: hsl(var(--accent) / 0.35) !important;
 }
 .cm-breakpointGutter {
-  width: 14px;
+  width: 10px;
   cursor: pointer;
+}
+.cm-gutter-lint {
+  width: 12px !important;
 }
 .cm-breakpointGutter .cm-gutterElement {
   display: flex;

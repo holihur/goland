@@ -88,6 +88,23 @@ describe("useIdeLayout", () => {
     expect(result.current.layout.bottomOpen).toBe(false);
   });
 
+  it("docks the sidebar on either side and persists it", async () => {
+    const { result, unmount } = renderHook(() => useIdeLayout("u1", "w1"));
+    expect(result.current.layout.sidebarPosition).toBe("left");
+    act(() => result.current.toggleSidebarPosition());
+    expect(result.current.layout.sidebarPosition).toBe("right");
+    act(() => result.current.setSidebarPosition("left"));
+    expect(result.current.layout.sidebarPosition).toBe("left");
+    act(() => result.current.setSidebarPosition("right"));
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem(layoutStorageKey("u1", "w1")) ?? "{}");
+      expect(stored.sidebarPosition).toBe("right");
+    });
+    unmount();
+    const restored = renderHook(() => useIdeLayout("u1", "w1"));
+    expect(restored.result.current.layout.sidebarPosition).toBe("right");
+  });
+
   it("opens the bottom dock in a specific view", () => {
     const { result } = renderHook(() => useIdeLayout("u1", "w1"));
     act(() => result.current.setBottomOpen(false));

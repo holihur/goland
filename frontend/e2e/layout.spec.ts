@@ -259,5 +259,13 @@ test("command center: run commands, rebind shortcuts and curate menus", async ({
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "View menu" }).click();
   await expect(page.getByRole("menuitem", { name: /Show explorer/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "View menu" }).click();
+  await page.getByRole("menuitem", { name: /Move sidebar to right/ }).click();
+  await expect.poll(async () => (await page.getByTestId("sidebar").boundingBox())?.x ?? 0).toBeGreaterThan(800);
+  await page.getByRole("button", { name: "View menu" }).click();
+  await page.getByRole("menuitem", { name: /Move sidebar to left/ }).click();
+  await expect.poll(async () => (await page.getByTestId("sidebar").boundingBox())?.x ?? 999).toBeLessThan(200);
   await page.close();
 });

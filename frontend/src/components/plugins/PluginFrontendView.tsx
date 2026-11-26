@@ -265,7 +265,7 @@ export function PluginFrontendView({
             </div>
           </div>
         )}
-        <div ref={hostRef} className="h-full min-h-0" data-testid={`plugin-frontend-${plugin.id}-${frontend.id}`} />
+        <div ref={hostRef} className="h-full min-h-0 w-full min-w-0 overflow-hidden" data-testid={`plugin-frontend-${plugin.id}-${frontend.id}`} />
       </div>
     </div>
   );

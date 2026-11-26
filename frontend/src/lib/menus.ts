@@ -57,6 +57,7 @@ const BUILTIN_MENUS: Array<{ id: string; label: string; items: Array<[string, st
       ["show-outline", "Panels"],
       ["show-git", "Panels"],
       ["toggle-sidebar", "Layout"],
+      ["toggle-sidebar-position", "Layout"],
       ["toggle-terminal", "Layout"],
       ["toggle-maximize-panel", "Layout"],
       ["reset-layout", "Layout"],

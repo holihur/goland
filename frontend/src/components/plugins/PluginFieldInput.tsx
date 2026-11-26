@@ -15,7 +15,7 @@ export function PluginFieldInput({
   const common =
     "w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60";
   return (
-    <label className="block space-y-1" htmlFor={id}>
+    <label className="block min-w-0 space-y-1" htmlFor={id}>
       <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {field.label}
         {field.required ? <span className="text-red-400">*</span> : null}
@@ -85,7 +85,7 @@ export function PluginFieldInput({
         />
       )}
       {field.help && field.type !== "boolean" ? (
-        <span className="block text-[10px] leading-4 text-muted-foreground">{field.help}</span>
+        <span className="block break-words text-[10px] leading-4 text-muted-foreground">{field.help}</span>
       ) : null}
     </label>
   );

@@ -75,7 +75,7 @@ export function PluginSettingsSection({ workspaceId }: { workspaceId: string }) 
   }
 
   return (
-    <div className="space-y-3" data-testid="plugin-settings">
+    <div className="min-w-0 space-y-3" data-testid="plugin-settings">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         <Puzzle className="h-3 w-3" /> Plugins
       </div>
@@ -83,7 +83,7 @@ export function PluginSettingsSection({ workspaceId }: { workspaceId: string }) 
         const fields = settingsFields(plugin);
         const draft = drafts[plugin.id] ?? {};
         return (
-          <div key={plugin.id} className="space-y-2 rounded-md border bg-background/40 p-2" data-plugin-id={plugin.id}>
+          <div key={plugin.id} className="min-w-0 space-y-2 overflow-hidden rounded-md border bg-background/40 p-2" data-plugin-id={plugin.id}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="truncate text-xs font-medium">{plugin.name}</div>

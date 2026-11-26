@@ -22,12 +22,14 @@ export function ActivityBar({
   onSelect,
   onPalette,
   pluginPanels = [],
+  position = "left",
 }: {
   view: SideView;
   sidebarOpen: boolean;
   onSelect: (view: SideView) => void;
   onPalette: () => void;
   pluginPanels?: PluginPanelEntry[];
+  position?: "left" | "right";
 }) {
   const items: Array<{ id: SideView; icon: ReactNode; label: string }> = [
     { id: "explorer", icon: <Files className="h-[18px] w-[18px]" />, label: "Explorer (⌘B)" },
@@ -42,7 +44,12 @@ export function ActivityBar({
     })),
   ];
   return (
-    <div className="flex w-11 shrink-0 flex-col items-center border-r bg-panel py-1">
+    <div
+      className={cn(
+        "flex w-11 shrink-0 flex-col items-center bg-panel py-1",
+        position === "right" ? "order-3 border-l" : "border-r",
+      )}
+    >
       {items.map((item) => (
         <Tooltip key={item.id}>
           <TooltipTrigger asChild>

@@ -16,6 +16,8 @@ export interface ResizeDividerProps {
   onReset?: () => void;
   label: string;
   className?: string;
+  /** Flips horizontal drag/key directions for a panel docked on the right. */
+  invert?: boolean;
   /** Small visual handle shown in the middle of the divider. */
   showHandle?: boolean;
 }
@@ -38,6 +40,7 @@ export function ResizeDivider({
   onReset,
   label,
   className,
+  invert = false,
   showHandle = true,
 }: ResizeDividerProps) {
   const [dragging, setDragging] = useState(false);
@@ -96,7 +99,12 @@ export function ResizeDivider({
     if (!start) return;
     event.preventDefault();
     const pointer = axis === "x" ? event.clientX : event.clientY;
-    const delta = axis === "x" ? pointer - start.pointer : start.pointer - pointer;
+    const delta =
+      axis === "x"
+        ? invert
+          ? start.pointer - pointer
+          : pointer - start.pointer
+        : start.pointer - pointer;
     latest.current.onChange(clamp(start.value + delta, latest.current.min, latest.current.max));
   };
 
@@ -109,8 +117,8 @@ export function ResizeDivider({
     const step = event.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
     let delta = 0;
     if (axis === "x") {
-      if (event.key === "ArrowLeft") delta = -step;
-      else if (event.key === "ArrowRight") delta = step;
+      if (event.key === "ArrowLeft") delta = invert ? step : -step;
+      else if (event.key === "ArrowRight") delta = invert ? -step : step;
     } else if (event.key === "ArrowUp") delta = step;
     else if (event.key === "ArrowDown") delta = -step;
     if (!delta) return;

@@ -20,6 +20,7 @@ export const NARROW_BREAKPOINT = 900;
 export type SideView = "explorer" | "search" | "outline" | "git" | "debug" | "settings" | `plugin:${string}`;
 export type BottomView = "terminal" | "output" | "tests";
 export type SplitDirection = "right" | "down";
+export type SidebarPosition = "left" | "right";
 
 export interface EditorGroupState {
   /** Tab paths in display order. */
@@ -32,6 +33,7 @@ export interface LayoutState {
   version: number;
   sidebarWidth: number;
   sidebarOpen: boolean;
+  sidebarPosition: SidebarPosition;
   sideView: SideView;
   bottomHeight: number;
   bottomOpen: boolean;
@@ -76,6 +78,7 @@ export function defaultLayout(groupId = "group-1"): LayoutState {
     version: LAYOUT_VERSION,
     sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
     sidebarOpen: true,
+    sidebarPosition: "left",
     sideView: "explorer",
     bottomHeight: DEFAULT_BOTTOM_HEIGHT,
     bottomOpen: true,
@@ -263,7 +266,10 @@ export function closeGroup(layout: LayoutState, groupId: string): LayoutState {
   };
 }
 
-export function updateSidebar(layout: LayoutState, patch: Partial<Pick<LayoutState, "sidebarWidth" | "sidebarOpen" | "sideView">>): LayoutState {
+export function updateSidebar(
+  layout: LayoutState,
+  patch: Partial<Pick<LayoutState, "sidebarWidth" | "sidebarOpen" | "sidebarPosition" | "sideView">>,
+): LayoutState {
   const next = { ...layout, ...patch };
   return { ...next, sidebarWidth: clampSidebarWidth(next.sidebarWidth) };
 }
@@ -300,6 +306,7 @@ export function sanitizeLayout(raw: unknown, viewportHeight: number): LayoutStat
     viewportHeight,
   );
   const sideView = isSideView(raw.sideView) ? raw.sideView : fallback.sideView;
+  const sidebarPosition: SidebarPosition = raw.sidebarPosition === "right" ? "right" : "left";
   const bottomView: BottomView =
     raw.bottomView === "output" ? "output" : raw.bottomView === "tests" ? "tests" : "terminal";
 
@@ -341,6 +348,7 @@ export function sanitizeLayout(raw: unknown, viewportHeight: number): LayoutStat
     version: LAYOUT_VERSION,
     sidebarWidth,
     sidebarOpen: asBoolean(raw.sidebarOpen, fallback.sidebarOpen),
+    sidebarPosition,
     sideView,
     bottomHeight,
     bottomOpen: asBoolean(raw.bottomOpen, fallback.bottomOpen),

@@ -21,6 +21,7 @@ import { useEditorViewState } from "@/lib/useEditorViewState";
 import { useBreakpoints } from "@/lib/useBreakpoints";
 import { usePluginContributions } from "@/lib/usePluginContributions";
 import { pluginLspSocket } from "@/lib/plugin-api";
+import { cn } from "@/lib/utils";
 import { PluginSidebarPanel } from "@/components/plugins/PluginSidebarPanel";
 import { IdeFooter } from "./IdeFooter";
 import { buildPaletteActions } from "./paletteActions";
@@ -33,10 +34,6 @@ import {
   groupOfPath,
   type SplitDirection,
 } from "@/lib/layout";
-
-function tabName(path: string) {
-  return path.split("/").pop() ?? path;
-}
 
 export function IDE({
   user,
@@ -55,6 +52,7 @@ export function IDE({
   const {
     layout,
     compact,
+    sidebarRight,
     sidebarMax,
     maxBottomHeight,
     restoredPaths,
@@ -62,6 +60,7 @@ export function IDE({
     setSidebarWidth,
     setSidebarOpen,
     toggleSidebar,
+    toggleSidebarPosition,
     setSideView: showSideView,
     setBottomView,
     setBottomOpen,
@@ -83,11 +82,6 @@ export function IDE({
   const terminalOpen = layout.bottomOpen;
   const bottomView = layout.bottomView;
   const initialLayoutRef = useRef(layout);
-  const pluginView = view.startsWith("plugin:");
-  useEffect(() => {
-    if (!pluginView || compact) return;
-    if (layout.sidebarWidth < 420) setSidebarWidth(Math.min(460, sidebarMax));
-  }, [pluginView, compact, layout.sidebarWidth, sidebarMax, setSidebarWidth]);
   const [treeKey, setTreeKey] = useState(0);
   const [gitKey, setGitKey] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -135,7 +129,7 @@ export function IDE({
                   ...prev,
                   {
                     path,
-                    name: tabName(path),
+                    name: path.split("/").pop() ?? path,
                     content: draft.content,
                     etag: draft.etag,
                     binary: file.binary,
@@ -285,7 +279,7 @@ export function IDE({
           ...prev,
           {
             path,
-            name: tabName(path),
+            name: path.split("/").pop() ?? path,
             content: draft.content,
             etag: draft.etag,
             binary: file.binary,
@@ -430,6 +424,7 @@ export function IDE({
     saveTab: (path) => void saveTab(path),
     closeTab,
     toggleSidebar,
+    toggleSidebarPosition,
     toggleBottom,
     openBottom,
     showSideView,
@@ -510,6 +505,7 @@ export function IDE({
             onSelect={selectSideView}
             onPalette={() => setPaletteOpen(true)}
             pluginPanels={plugins.pluginPanels}
+            position={layout.sidebarPosition}
           />
 
           {sidebarOpen && (
@@ -517,17 +513,35 @@ export function IDE({
             {compact && (
               <button
                 aria-label="Close sidebar"
-                className="absolute inset-y-0 left-11 right-0 z-20 bg-black/30"
+                className={cn(
+                  "absolute inset-y-0 z-20 bg-black/30",
+                  sidebarRight ? "left-0 right-11" : "left-11 right-0",
+                )}
                 onClick={() => setSidebarOpen(false)}
+              />
+            )}
+            {!compact && sidebarRight && (
+              <ResizeDivider
+                axis="x"
+                value={layout.sidebarWidth}
+                min={180}
+                max={sidebarMax}
+                label="Resize sidebar"
+                invert
+                className="order-2"
+                onChange={setSidebarWidth}
+                onReset={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
               />
             )}
             <aside
               data-testid="sidebar"
-              className={
+              className={cn(
                 compact
-                  ? "absolute inset-y-0 left-11 z-30 flex w-[82vw] max-w-[320px] flex-col border-r bg-panel shadow-2xl"
-                  : "flex shrink-0 flex-col border-r bg-panel"
-              }
+                  ? sidebarRight
+                    ? "absolute inset-y-0 right-11 z-30 flex w-[82vw] max-w-[320px] flex-col overflow-hidden border-l bg-panel shadow-2xl"
+                    : "absolute inset-y-0 left-11 z-30 flex w-[82vw] max-w-[320px] flex-col overflow-hidden border-r bg-panel shadow-2xl"
+                  : cn("flex min-w-0 shrink-0 flex-col overflow-hidden bg-panel", sidebarRight ? "order-2 border-l" : "border-r"),
+              )}
               style={compact ? undefined : { width: layout.sidebarWidth }}
             >
               {view === "explorer" && (
@@ -604,7 +618,7 @@ export function IDE({
                 }
               />
             </aside>
-            {!compact && (
+            {!compact && !sidebarRight && (
               <ResizeDivider
                 axis="x"
                 value={layout.sidebarWidth}
@@ -618,7 +632,7 @@ export function IDE({
             </>
           )}
 
-          <main className="relative flex min-w-0 flex-1 flex-col">
+          <main className={cn("relative flex min-w-0 flex-1 flex-col", sidebarRight && "order-1")}>
             <div className="flex min-h-0 flex-1 flex-col">
               {tabs.length === 0 ? (
                 <WelcomePane

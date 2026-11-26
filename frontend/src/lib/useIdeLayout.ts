@@ -105,6 +105,16 @@ export function useIdeLayout(userId: string, workspaceId: string) {
     setLayout((current) => updateSidebar(current, { sidebarOpen: open }));
   }, []);
 
+  const setSidebarPosition = useCallback((position: "left" | "right") => {
+    setLayout((current) => updateSidebar(current, { sidebarPosition: position }));
+  }, []);
+
+  const toggleSidebarPosition = useCallback(() => {
+    setLayout((current) =>
+      updateSidebar(current, { sidebarPosition: current.sidebarPosition === "right" ? "left" : "right" }),
+    );
+  }, []);
+
   const toggleSidebar = useCallback(() => {
     setLayout((current) => updateSidebar(current, { sidebarOpen: !current.sidebarOpen }));
   }, []);
@@ -197,10 +207,21 @@ export function useIdeLayout(userId: string, workspaceId: string) {
   // Keep the sidebar from squeezing the editor below a usable width.
   const sidebarMax = Math.max(180, Math.min(600, viewport.width - 260));
 
+  const previousView = useRef(layout.sideView);
+  useEffect(() => {
+    const changed = previousView.current !== layout.sideView;
+    previousView.current = layout.sideView;
+    if (!changed || compact || !layout.sideView.startsWith("plugin:")) return;
+    // Give plugin consoles room on first open, but keep user resizing intact.
+    if (layout.sidebarWidth < 420) setSidebarWidth(Math.min(460, sidebarMax));
+  }, [compact, layout.sideView, layout.sidebarWidth, sidebarMax, setSidebarWidth]);
+
   const actions = useMemo(
     () => ({
       setSidebarWidth,
       setSidebarOpen,
+      setSidebarPosition,
+      toggleSidebarPosition,
       toggleSidebar,
       setSideView,
       setBottomView,
@@ -221,6 +242,8 @@ export function useIdeLayout(userId: string, workspaceId: string) {
     [
       setSidebarWidth,
       setSidebarOpen,
+      setSidebarPosition,
+      toggleSidebarPosition,
       toggleSidebar,
       setSideView,
       setBottomView,
@@ -244,6 +267,7 @@ export function useIdeLayout(userId: string, workspaceId: string) {
     layout,
     viewport,
     compact,
+    sidebarRight: layout.sidebarPosition === "right",
     sidebarMax,
     maxBottomHeight: Math.max(120, Math.round(viewport.height * 0.7)),
     restoredPaths,
