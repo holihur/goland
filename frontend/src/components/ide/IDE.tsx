@@ -99,7 +99,7 @@ export function IDE({
   const [lspClients, setLspClients] = useState<Record<string, LSPClient>>({});
   const [lspStatus, setLspStatus] = useState<Record<string, string>>({});
   const [jumpTo, setJumpTo] = useState<(SourceLocation & { nonce: number }) | null>(null);
-  const [references, setReferences] = useState<SourceLocation[] | null>(null);
+  const [locationsDialog, setLocationsDialog] = useState<{ title: string; locations: SourceLocation[] } | null>(null);
   const lspRef = useRef<Record<string, LSPClient>>({});
   const lspErrorNotified = useRef<Set<string>>(new Set());
 
@@ -216,20 +216,6 @@ export function IDE({
     bottomView,
     openOutput: () => openBottom("output"),
     onFinished: () => setGitKey((value) => value + 1),
-  });
-
-  const { renameSymbol, requestCodeActions } = useLSPActions({
-    workspaceId: workspace.id,
-    userId: user.id,
-    activeTab,
-    cursorLine,
-    cursorColumn,
-    diagnostics,
-    tabsRef,
-    setTabs,
-    refreshTree,
-    refreshGit,
-    lspClientForPath,
   });
 
   const reloadReplacedFiles = useCallback(
@@ -381,6 +367,22 @@ export function IDE({
     [openFile],
   );
 
+  const { goToDefinition, goToImplementation, findReferences, renameSymbol, requestCodeActions } = useLSPActions({
+    workspaceId: workspace.id,
+    userId: user.id,
+    activeTab,
+    cursorLine,
+    cursorColumn,
+    diagnostics,
+    tabsRef,
+    setTabs,
+    refreshTree,
+    refreshGit,
+    lspClientForPath,
+    onOpenLocation: (location) => void openLocation(location),
+    onShowLocations: (title, locations) => setLocationsDialog({ title, locations }),
+  });
+
   const goToWorkspaceSymbol = useCallback(async () => {
     if (!activeTab) return;
     const lsp = lspClientForPath(activeTab.path);
@@ -434,6 +436,9 @@ export function IDE({
     openTokens: () => setTokensOpen(true),
     openByok: () => setByokOpen(true),
     goToWorkspaceSymbol: () => void goToWorkspaceSymbol(),
+    goToDefinition: () => void goToDefinition(),
+    findReferences: () => void findReferences(),
+    goToImplementation: () => void goToImplementation(),
     renameSymbol: () => void renameSymbol(),
     toggleBreakpoint,
     split,
@@ -460,8 +465,6 @@ export function IDE({
       lspClients={lspClients}
       lspTargetForPath={lspTargetForPath}
       jumpTo={jumpTo}
-      openLocation={openLocation}
-      setReferences={setReferences}
       breakpoints={breakpoints}
       toggleBreakpoint={toggleBreakpoint}
       updateContent={updateContent}
@@ -734,16 +737,15 @@ export function IDE({
           onRun={(plugin, command) => plugins.runPluginCommand(plugin, command)}
         />
       </div>
-
       <ReferencesDialog
-        locations={references}
-        onClose={() => setReferences(null)}
+        locations={locationsDialog?.locations ?? null}
+        title={locationsDialog?.title}
+        onClose={() => setLocationsDialog(null)}
         onOpen={(location) => {
-          setReferences(null);
+          setLocationsDialog(null);
           void openLocation(location);
         }}
       />
-
       {settingsOpen && (
         <Suspense fallback={null}>
           <SettingsDialog open onOpenChange={setSettingsOpen} />
@@ -759,7 +761,6 @@ export function IDE({
           <ByokDialog open onOpenChange={setByokOpen} />
         </Suspense>
       )}
-
       {paletteOpen && (
         <Suspense fallback={null}>
           <CommandPalette
@@ -772,7 +773,6 @@ export function IDE({
           />
         </Suspense>
       )}
-
       {managersOpen && (
         <Suspense fallback={null}>
           <ManagerDialog

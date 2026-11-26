@@ -2,6 +2,7 @@ import {
   Brain,
   Bug,
   Columns2,
+  FileCode2,
   FlaskConical,
   FolderOpen,
   GitBranch,
@@ -45,6 +46,9 @@ export function buildPaletteActions({
   openTokens,
   openByok,
   goToWorkspaceSymbol,
+  goToDefinition,
+  findReferences,
+  goToImplementation,
   renameSymbol,
   toggleBreakpoint,
   split,
@@ -71,6 +75,9 @@ export function buildPaletteActions({
   openTokens: () => void;
   openByok: () => void;
   goToWorkspaceSymbol: () => void;
+  goToDefinition: () => void;
+  findReferences: () => void;
+  goToImplementation: () => void;
   renameSymbol: () => void;
   toggleBreakpoint: (path: string, line: number) => void;
   split: (direction: "right" | "down") => void;
@@ -217,6 +224,36 @@ export function buildPaletteActions({
       defaultKey: "Mod+T",
       icon: <Search className="h-3.5 w-3.5" />,
       run: () => void goToWorkspaceSymbol(),
+    },
+    {
+      id: "go-to-definition",
+      label: "Go to definition",
+      description: "Jump to the symbol definition under the cursor.",
+      category: "Code",
+      source: SOURCE,
+      defaultKey: "F12",
+      icon: <FileCode2 className="h-3.5 w-3.5" />,
+      run: goToDefinition,
+    },
+    {
+      id: "find-references",
+      label: "Find references",
+      description: "List every reference to the symbol under the cursor.",
+      category: "Code",
+      source: SOURCE,
+      defaultKey: "Shift+F12",
+      icon: <Search className="h-3.5 w-3.5" />,
+      run: findReferences,
+    },
+    {
+      id: "go-to-implementation",
+      label: "Go to implementation",
+      description: "Jump to an implementation of the interface or method under the cursor.",
+      category: "Code",
+      source: SOURCE,
+      defaultKey: "Mod+F12",
+      icon: <GitBranch className="h-3.5 w-3.5" />,
+      run: goToImplementation,
     },
     {
       id: "rename-symbol",

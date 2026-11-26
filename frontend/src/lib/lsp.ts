@@ -202,6 +202,7 @@ export class LSPClient {
             },
             hover: { dynamicRegistration: false, contentFormat: ["markdown", "plaintext"] },
             definition: { dynamicRegistration: false, linkSupport: true },
+            implementation: { dynamicRegistration: false, linkSupport: true },
             references: { dynamicRegistration: false },
             rename: { dynamicRegistration: false, prepareSupport: false },
             codeAction: { dynamicRegistration: false, codeActionLiteralSupport: { codeActionKind: { valueSet: ["", "quickfix", "refactor", "source"] } } },
@@ -385,6 +386,17 @@ export class LSPClient {
     return normalizeLocations(
       this.rootPath,
       await this.request("textDocument/definition", {
+        textDocument: { uri: fileURI(this.rootPath, path) },
+        position,
+      }),
+    );
+  }
+
+  async implementation(path: string, position: Position): Promise<SourceLocation[]> {
+    await this.ready;
+    return normalizeLocations(
+      this.rootPath,
+      await this.request("textDocument/implementation", {
         textDocument: { uri: fileURI(this.rootPath, path) },
         position,
       }),

@@ -4,7 +4,7 @@ import { api, ApiError } from "./api";
 import type { Diagnostic } from "./types";
 import { clearDraft } from "./drafts";
 import { applyTextEdits } from "./workspaceEdit";
-import type { LSPClient, WorkspaceFileEdit } from "./lsp";
+import type { LSPClient, SourceLocation, WorkspaceFileEdit } from "./lsp";
 
 interface ActionTab {
   path: string;
@@ -27,6 +27,8 @@ export function useLSPActions({
   refreshTree,
   refreshGit,
   lspClientForPath,
+  onOpenLocation,
+  onShowLocations,
 }: {
   workspaceId: string;
   userId: string;
@@ -39,6 +41,8 @@ export function useLSPActions({
   refreshTree: () => void;
   refreshGit: () => void;
   lspClientForPath: (path: string) => LSPClient | null;
+  onOpenLocation: (location: SourceLocation) => void;
+  onShowLocations: (title: string, locations: SourceLocation[]) => void;
 }) {
   const applyWorkspaceEdits = useCallback(
     async (files: WorkspaceFileEdit[]) => {
@@ -97,6 +101,65 @@ export function useLSPActions({
     [workspaceId, userId, tabsRef, setTabs, refreshTree, refreshGit, lspClientForPath],
   );
 
+  const cursorPosition = useCallback(
+    () => ({ line: Math.max(0, cursorLine - 1), character: Math.max(0, cursorColumn - 1) }),
+    [cursorLine, cursorColumn],
+  );
+
+  const goToDefinition = useCallback(async () => {
+    const tab = activeTab;
+    const lsp = tab ? lspClientForPath(tab.path) : null;
+    if (!tab || !lsp) {
+      toast.error("No language server is available for this file");
+      return;
+    }
+    try {
+      const locations = await lsp.definition(tab.path, cursorPosition());
+      if (!locations.length) {
+        toast.info("No definition found");
+        return;
+      }
+      if (locations.length === 1) onOpenLocation(locations[0]);
+      else onShowLocations("Definitions", locations);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Go to definition failed");
+    }
+  }, [activeTab, cursorPosition, lspClientForPath, onOpenLocation, onShowLocations]);
+
+  const goToImplementation = useCallback(async () => {
+    const tab = activeTab;
+    const lsp = tab ? lspClientForPath(tab.path) : null;
+    if (!tab || !lsp) {
+      toast.error("No language server is available for this file");
+      return;
+    }
+    try {
+      const locations = await lsp.implementation(tab.path, cursorPosition());
+      if (!locations.length) {
+        toast.info("No implementations found");
+        return;
+      }
+      if (locations.length === 1) onOpenLocation(locations[0]);
+      else onShowLocations("Implementations", locations);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Go to implementation failed");
+    }
+  }, [activeTab, cursorPosition, lspClientForPath, onOpenLocation, onShowLocations]);
+
+  const findReferences = useCallback(async () => {
+    const tab = activeTab;
+    const lsp = tab ? lspClientForPath(tab.path) : null;
+    if (!tab || !lsp) {
+      toast.error("No language server is available for this file");
+      return;
+    }
+    try {
+      onShowLocations("References", await lsp.references(tab.path, cursorPosition()));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Find references failed");
+    }
+  }, [activeTab, cursorPosition, lspClientForPath, onShowLocations]);
+
   const renameSymbol = useCallback(async () => {
     const tab = activeTab;
     if (!tab) return;
@@ -145,5 +208,5 @@ export function useLSPActions({
     }
   }, [activeTab, cursorLine, cursorColumn, diagnostics, lspClientForPath, applyWorkspaceEdits]);
 
-  return { renameSymbol, requestCodeActions };
+  return { goToDefinition, goToImplementation, findReferences, renameSymbol, requestCodeActions };
 }

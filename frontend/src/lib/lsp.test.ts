@@ -135,6 +135,12 @@ describe("LSPClient requests", () => {
       { path: "/other/c.go", line: 1, column: 1, endLine: 1, endColumn: 1 },
     ]);
 
+    const implementations = client.implementation("main.go", { line: 0, character: 0 });
+    await respond(socket, "textDocument/implementation", [
+      { uri: "file:///workspace/project/impl.go", range: { start: { line: 2, character: 4 }, end: { line: 2, character: 8 } } },
+    ]);
+    await expect(implementations).resolves.toEqual([{ path: "impl.go", line: 3, column: 5, endLine: 3, endColumn: 9 }]);
+
     const refs = client.references("main.go", { line: 0, character: 0 });
     await respond(socket, "textDocument/references", { uri: "file:///workspace/project/main.go", range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } });
     await expect(refs).resolves.toHaveLength(1);

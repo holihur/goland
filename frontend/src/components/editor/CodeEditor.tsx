@@ -191,8 +191,6 @@ export function CodeEditor({
   onSave,
   diagnostics = [],
   lsp = null,
-  onOpenLocation,
-  onReferences,
   jumpTo,
   breakpoints = [],
   onToggleBreakpoint,
@@ -207,8 +205,6 @@ export function CodeEditor({
   onSave: () => void;
   diagnostics?: Diagnostic[];
   lsp?: LSPClient | null;
-  onOpenLocation?: (location: SourceLocation) => void;
-  onReferences?: (locations: SourceLocation[]) => void;
   jumpTo?: (SourceLocation & { nonce: number }) | null;
   breakpoints?: number[];
   onToggleBreakpoint?: (line: number) => void;
@@ -222,11 +218,7 @@ export function CodeEditor({
   const [language, setLanguage] = useState<Extension>([]);
   const viewRef = useRef<EditorView | null>(null);
   const saveRef = useRef(onSave);
-  const openLocationRef = useRef(onOpenLocation);
-  const referencesRef = useRef(onReferences);
   saveRef.current = onSave;
-  openLocationRef.current = onOpenLocation;
-  referencesRef.current = onReferences;
   const jumpRef = useRef(jumpTo);
   jumpRef.current = jumpTo;
   const cursorRef = useRef(onCursorChange);
@@ -363,46 +355,6 @@ export function CodeEditor({
       autocompletion({ override: [lspCompletion], activateOnTyping: true, maxRenderedOptions: 60 }),
       hoverSource,
       keymap.of([
-        {
-          key: "F12",
-          preventDefault: true,
-          run: (view) => {
-            void (async () => {
-              try {
-                const locations = await lsp.definition(path, positionAt(view, view.state.selection.main.head));
-                const first = locations[0];
-                if (!first) {
-                  toast.info("No definition found");
-                  return;
-                }
-                if (first.path === path) {
-                  const pos = offsetAt(view, first.line - 1, first.column - 1);
-                  view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
-                } else {
-                  openLocationRef.current?.(first);
-                }
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Go to definition failed");
-              }
-            })();
-            return true;
-          },
-        },
-        {
-          key: "Shift-F12",
-          preventDefault: true,
-          run: (view) => {
-            void (async () => {
-              try {
-                const locations = await lsp.references(path, positionAt(view, view.state.selection.main.head));
-                referencesRef.current?.(locations);
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Find references failed");
-              }
-            })();
-            return true;
-          },
-        },
         {
           key: "Mod-Shift-f",
           preventDefault: true,

@@ -13,8 +13,6 @@ export function EditorPane({
   lspClients,
   lspTargetForPath,
   jumpTo,
-  openLocation,
-  setReferences,
   breakpoints,
   toggleBreakpoint,
   updateContent,
@@ -29,8 +27,6 @@ export function EditorPane({
   lspClients: Record<string, LSPClient>;
   lspTargetForPath: (path: string) => { key: string } | null;
   jumpTo: (SourceLocation & { nonce: number }) | null;
-  openLocation: (location: SourceLocation) => Promise<void>;
-  setReferences: (locations: SourceLocation[]) => void;
   breakpoints: Record<string, number[]>;
   toggleBreakpoint: (path: string, line: number) => void;
   updateContent: (path: string, content: string) => void;
@@ -64,8 +60,6 @@ export function EditorPane({
         diagnostics={diagnostics[path] ?? []}
         lsp={lspClients[lspTargetForPath(path)?.key ?? ""] ?? null}
         jumpTo={jumpTo?.path === path ? jumpTo : null}
-        onOpenLocation={(location) => void openLocation(location)}
-        onReferences={(locations) => setReferences(locations)}
         breakpoints={breakpoints[path] ?? []}
         onToggleBreakpoint={(line) => toggleBreakpoint(path, line)}
         initialCursorLine={state?.line ?? 0}

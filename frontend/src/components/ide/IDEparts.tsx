@@ -197,10 +197,12 @@ export function WorkspaceSettings({ workspace }: { workspace: Workspace }) {
 
 export function ReferencesDialog({
   locations,
+  title = "References",
   onClose,
   onOpen,
 }: {
   locations: SourceLocation[] | null;
+  title?: string;
   onClose: () => void;
   onOpen: (location: SourceLocation) => void;
 }) {
@@ -208,14 +210,14 @@ export function ReferencesDialog({
     <Dialog open={!!locations} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>References</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {locations?.length ?? 0} reference{(locations?.length ?? 0) === 1 ? "" : "s"} found across the workspace.
+            {locations?.length ?? 0} location{(locations?.length ?? 0) === 1 ? "" : "s"} found across the workspace.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[360px] divide-y overflow-auto rounded-md border">
           {locations?.length === 0 && (
-            <div className="p-4 text-xs text-muted-foreground">No references found.</div>
+            <div className="p-4 text-xs text-muted-foreground">No {title.toLowerCase()} found.</div>
           )}
           {locations?.map((location, index) => (
             <button

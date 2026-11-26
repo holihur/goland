@@ -15,7 +15,7 @@ Implemented:
 - Window management: draggable sidebar/bottom-panel splitters, collapsible and maximizable panels, up to four editor groups with tabs dragged between groups, per-user/workspace layout persistence, and a touch-friendly narrow-screen layout with overlay panels.
 - Plugin system: admin-installed packages, per-workspace enable/config, JSON-RPC plugin hosts, declarative panels/status/settings, file/Git hooks, editor actions, plugin menus and keybindings, plugin-provided LSP/DAP servers, and native ES-module frontends rendered as Web Components with Shadow DOM. The optional Agent plugin embeds the vendored `agent/` runtime.
 - Command center: a dedicated configuration window for searching/running commands, rebinding shortcuts with conflict detection, and showing/reordering menu entries. Plugin contributions participate automatically.
-- gopls and typescript-language-server: diagnostics, completion, hover, definition, references, formatting, rename and code actions, with optional format-on-save.
+- gopls and typescript-language-server: diagnostics, completion, hover, go-to-definition, find-references, go-to-implementation, formatting, rename and code actions, with optional format-on-save.
 - xterm.js PTY terminal, Go/pnpm tasks with streamed output, and a Go/Vitest test explorer with per-test run results.
 - Delve DAP for Go and js-debug DAP for Node/TypeScript: clickable gutter breakpoints, call stack, variables.
 - Browser CDP attach, source maps, breakpoints, call stack, variables and session cleanup.

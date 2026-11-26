@@ -43,6 +43,9 @@ const BUILTIN_MENUS: Array<{ id: string; label: string; items: Array<[string, st
     id: "edit",
     label: "Edit",
     items: [
+      ["go-to-definition", "Code"],
+      ["find-references", "Code"],
+      ["go-to-implementation", "Code"],
       ["rename-symbol", "Code"],
       ["workspace-symbol", "Navigate"],
       ["show-search", "Navigate"],
