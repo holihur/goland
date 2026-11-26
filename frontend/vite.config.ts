@@ -26,7 +26,6 @@ export default defineConfig({
           groups: [
             { name: "vite-preload", test: /preload-helper/ },
             { name: "react", test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
-            { name: "lezer", test: /node_modules[\\/]@lezer[\\/]/, priority: 20 },
             { name: "codemirror-core", test: /node_modules[\\/]@codemirror[\\/](?!lang-|legacy-modes)/ },
             { name: "codemirror-react", test: /node_modules[\\/]@uiw[\\/]/ },
             { name: "xterm", test: /node_modules[\\/]@xterm[\\/]/ },
