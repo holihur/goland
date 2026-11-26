@@ -23,8 +23,8 @@ jobs:
         ports:
           - 27019:27017
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
@@ -42,18 +42,18 @@ jobs:
         run: |
           cd backend
           # Workspace isolation tests provision Unix users and require root.
-          sudo -E env "PATH=$PATH" "HOME=$HOME" go test ./... -coverprofile=/tmp/goland-cover.out
+          sudo env "PATH=$PATH" "HOME=$HOME" go test ./... -coverprofile=/tmp/goland-cover.out
           ../scripts/check-go-coverage.sh /tmp/goland-cover.out 70
 
   frontend:
     name: Frontend lint, tests and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -73,8 +73,8 @@ jobs:
     name: Agent module
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
@@ -87,7 +87,7 @@ jobs:
     name: Source file limits
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Enforce 800-line source files
         run: ./scripts/check-file-length.sh
 
@@ -95,6 +95,6 @@ jobs:
     name: Compose config
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate compose file
         run: docker compose -f deploy/compose.yml config > /dev/null
