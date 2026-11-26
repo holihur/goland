@@ -417,7 +417,8 @@ func (s *Store) CreateWorkspace(ctx context.Context, w *Workspace) error {
 }
 
 func (s *Store) ListWorkspaces(ctx context.Context, ownerID primitive.ObjectID) ([]Workspace, error) {
-	cur, err := s.Workspaces.Find(ctx, bson.M{"ownerId": ownerID}, options.Find().SetSort(bson.D{{Key: "updatedAt", Value: -1}}))
+	cur, err := s.Workspaces.Find(ctx, bson.M{"ownerId": ownerID},
+		options.Find().SetSort(bson.D{{Key: "updatedAt", Value: -1}, {Key: "_id", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
