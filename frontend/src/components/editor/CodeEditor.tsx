@@ -15,8 +15,8 @@ import { useTheme } from "@/lib/theme";
 
 const editorTheme = EditorView.theme({
   "&": { backgroundColor: "transparent", height: "100%" },
-  ".cm-content": { padding: "10px 0 80px" },
-  ".cm-line": { padding: "0 16px" },
+  ".cm-content": { padding: "0 0 80px" },
+  ".cm-line": { padding: "0" },
   ".cm-gutters": { paddingLeft: "6px" },
   ".cm-tooltip": { border: "1px solid hsl(var(--border))", background: "hsl(var(--popover))", color: "hsl(var(--popover-foreground))" },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
